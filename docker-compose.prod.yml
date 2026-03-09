@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/OWNER/capsule:latest  # Replace OWNER with your GitHub username
+    image: ghcr.io/Sn0wAlice/capsule:latest
     ports:
       - "${PORT:-3000}:3000"
     environment:

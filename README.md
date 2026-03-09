@@ -28,7 +28,7 @@ Application web self-hosted de gestion et lecture de vidéos. Organisez vos bibl
 ### 1. Cloner et configurer
 
 ```bash
-git clone https://github.com/OWNER/capsule.git
+git clone https://github.com/Sn0wAlice/capsule.git
 cd capsule
 cp .env.example .env
 ```
@@ -57,7 +57,6 @@ docker compose up -d
 **Production (image pré-construite depuis GHCR) :**
 
 ```bash
-# Editez docker-compose.prod.yml et remplacez OWNER par votre username GitHub
 docker compose -f docker-compose.prod.yml up -d
 ```
 
@@ -108,7 +107,7 @@ Le workflow GitHub Actions (`.github/workflows/docker.yml`) build et push automa
 - **Pull request** — build uniquement (pas de push), vérifie que l'image compile
 - **Multi-arch** — `linux/amd64` et `linux/arm64`
 
-L'image est disponible sur `ghcr.io/OWNER/capsule`.
+L'image est disponible sur `ghcr.io/Sn0wAlice/capsule`.
 
 ## Administration
 
