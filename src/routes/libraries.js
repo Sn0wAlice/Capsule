@@ -63,6 +63,42 @@ router.post('/:id/scan', async (req, res) => {
   }
 });
 
+const PAGE_SIZE = 60;
+
+// API: paginated videos for infinite scroll
+router.get('/:id/videos', async (req, res) => {
+  const libraryId = req.params.id;
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const sort = req.query.sort || 'name';
+  const order = req.query.order || 'asc';
+  const offset = (page - 1) * PAGE_SIZE;
+
+  try {
+    const [libs] = await pool.execute(
+      'SELECT id FROM libraries WHERE id = ? AND user_id = ?',
+      [libraryId, req.session.user.id]
+    );
+    if (libs.length === 0) return res.json({ videos: [], hasMore: false });
+
+    const orderCol = sort === 'date' ? 'v.updated_at' : sort === 'size' ? 'v.size' : 'v.filename';
+    const [rows] = await pool.execute(
+      `SELECT v.id, v.filename, v.title, v.size, t.filename as thumb
+       FROM videos v LEFT JOIN thumbnails t ON t.video_id = v.id
+       WHERE v.library_id = ?
+       ORDER BY ${orderCol} ${order === 'desc' ? 'DESC' : 'ASC'}
+       LIMIT ? OFFSET ?`,
+      [libraryId, PAGE_SIZE + 1, offset]
+    );
+
+    const hasMore = rows.length > PAGE_SIZE;
+    if (hasMore) rows.pop();
+    res.json({ videos: rows, hasMore });
+  } catch (err) {
+    console.error('Videos API error:', err);
+    res.json({ videos: [], hasMore: false });
+  }
+});
+
 // View library contents
 router.get('/:id', async (req, res) => {
   const libraryId = req.params.id;
@@ -80,18 +116,22 @@ router.get('/:id', async (req, res) => {
     const library = libs[0];
 
     let videos;
+    let hasMore = false;
+
     if (viewMode === 'flat') {
-      // All videos, flat list
-      const orderCol = sort === 'date' ? 'updated_at' : sort === 'size' ? 'size' : 'filename';
+      // Paginated flat list
+      const orderCol = sort === 'date' ? 'v.updated_at' : sort === 'size' ? 'v.size' : 'v.filename';
       const [rows] = await pool.execute(
-        `SELECT * FROM videos WHERE library_id = ? ORDER BY ${orderCol} ${order === 'desc' ? 'DESC' : 'ASC'}`,
-        [libraryId]
+        `SELECT v.*, t.filename as thumb FROM videos v LEFT JOIN thumbnails t ON t.video_id = v.id WHERE v.library_id = ? ORDER BY ${orderCol} ${order === 'desc' ? 'DESC' : 'ASC'} LIMIT ?`,
+        [libraryId, PAGE_SIZE + 1]
       );
+      hasMore = rows.length > PAGE_SIZE;
+      if (hasMore) rows.pop();
       videos = rows;
     } else {
       // Folder view: get videos in current path level
       const [rows] = await pool.execute(
-        'SELECT * FROM videos WHERE library_id = ?',
+        'SELECT v.*, t.filename as thumb FROM videos v LEFT JOIN thumbnails t ON t.video_id = v.id WHERE v.library_id = ?',
         [libraryId]
       );
 
@@ -131,6 +171,7 @@ router.get('/:id', async (req, res) => {
       sort,
       order,
       currentPath,
+      hasMore,
       folders: res.locals.folders || [],
       scanned: req.query.scanned || null,
       error: req.query.error || null,

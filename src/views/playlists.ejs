@@ -1,0 +1,41 @@
+<%- include('partials/header') %>
+
+<div class="page-header">
+  <h1>Playlists</h1>
+</div>
+
+<div class="card">
+  <h2>Créer une playlist</h2>
+  <form method="POST" action="/playlists/create" class="form-inline">
+    <div class="form-group">
+      <input type="text" name="name" placeholder="Nom de la playlist" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Créer</button>
+  </form>
+</div>
+
+<% if (playlists.length === 0) { %>
+  <div class="empty-state">
+    <p>Aucune playlist. Créez-en une pour organiser vos vidéos.</p>
+  </div>
+<% } else { %>
+  <div class="libraries-grid">
+    <% for (const pl of playlists) { %>
+      <div class="card library-card">
+        <div class="library-info">
+          <h3><a href="/playlists/<%= pl.id %>"><%= pl.name %></a></h3>
+          <p class="library-count"><%= pl.item_count || 0 %> vidéo(s)</p>
+        </div>
+        <div class="library-actions">
+          <a href="/playlists/<%= pl.id %>" class="btn btn-sm">Voir</a>
+          <form method="POST" action="/playlists/<%= pl.id %>/delete" style="display:inline"
+                onsubmit="return confirm('Supprimer cette playlist ?')">
+            <button type="submit" class="btn btn-sm btn-danger">Supprimer</button>
+          </form>
+        </div>
+      </div>
+    <% } %>
+  </div>
+<% } %>
+
+<%- include('partials/footer') %>

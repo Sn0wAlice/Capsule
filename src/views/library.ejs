@@ -38,13 +38,19 @@
 
   <!-- Folders -->
   <% if (folders.length > 0) { %>
-    <div class="file-list">
+    <div class="video-grid">
       <% for (const folder of folders) {
         const folderPath = currentPath ? currentPath + '/' + folder : folder;
       %>
-        <a href="/libraries/<%= library.id %>?view=folder&path=<%= encodeURIComponent(folderPath) %>" class="file-item folder-item">
-          <span class="file-icon">&#128193;</span>
-          <span class="file-name"><%= folder %></span>
+        <a href="/libraries/<%= library.id %>?view=folder&path=<%= encodeURIComponent(folderPath) %>" class="video-card folder-card">
+          <div class="video-card-preview folder-card-preview">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+          </div>
+          <div class="video-card-info">
+            <span class="video-card-title"><%= folder %></span>
+          </div>
         </a>
       <% } %>
     </div>
@@ -70,22 +76,28 @@
   </div>
 <% } %>
 
-<!-- Video list -->
+<!-- Video grid -->
 <% if (videos.length > 0) { %>
-  <div class="file-list">
+  <div class="video-grid" id="video-grid">
     <% for (const video of videos) { %>
-      <a href="/videos/<%= video.id %>" class="file-item video-item">
-        <span class="file-icon">&#127909;</span>
-        <div class="file-info">
-          <span class="file-name"><%= video.title || video.filename %></span>
-          <% if (viewMode === 'flat') { %>
-            <span class="file-path"><%= video.filepath %></span>
+      <a href="/videos/<%= video.id %>" class="video-card">
+        <div class="video-card-preview">
+          <% if (video.thumb) { %>
+            <img src="/videos/<%= video.id %>/thumb" alt="" loading="lazy">
           <% } %>
         </div>
-        <span class="file-size"><%= formatSize(video.size) %></span>
+        <div class="video-card-info">
+          <span class="video-card-title"><%= video.title || video.filename %></span>
+          <span class="video-card-meta"><%= formatSize(video.size) %></span>
+        </div>
       </a>
     <% } %>
   </div>
+  <% if (hasMore) { %>
+    <div id="load-more" class="load-more">
+      <div class="loader"></div>
+    </div>
+  <% } %>
 <% } else if (folders.length === 0) { %>
   <div class="empty-state">
     <p>Aucune vidéo trouvée. Lancez un scan.</p>
@@ -102,5 +114,65 @@ function formatSize(bytes) {
   return size.toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
 }
 %>
+
+<% if (viewMode === 'flat' && hasMore) { %>
+<script>
+(function() {
+  const grid = document.getElementById('video-grid');
+  const loader = document.getElementById('load-more');
+  let page = 2;
+  let loading = false;
+  let done = false;
+
+  function formatSize(bytes) {
+    if (!bytes) return '—';
+    const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
+    let i = 0; let s = bytes;
+    while (s >= 1024 && i < units.length - 1) { s /= 1024; i++; }
+    return s.toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
+  }
+
+  function loadMore() {
+    if (loading || done) return;
+    loading = true;
+    const params = new URLSearchParams({
+      page: page,
+      sort: '<%= sort %>',
+      order: '<%= order %>'
+    });
+    fetch('/libraries/<%= library.id %>/videos?' + params)
+      .then(r => r.json())
+      .then(data => {
+        for (const v of data.videos) {
+          const card = document.createElement('a');
+          card.href = '/videos/' + v.id;
+          card.className = 'video-card';
+          card.innerHTML =
+            '<div class="video-card-preview">' +
+            (v.thumb ? '<img src="/videos/' + v.id + '/thumb" alt="" loading="lazy">' : '') +
+            '</div>' +
+            '<div class="video-card-info">' +
+            '<span class="video-card-title">' + (v.title || v.filename).replace(/</g, '&lt;') + '</span>' +
+            '<span class="video-card-meta">' + formatSize(v.size) + '</span>' +
+            '</div>';
+          grid.appendChild(card);
+        }
+        page++;
+        loading = false;
+        if (!data.hasMore) {
+          done = true;
+          loader.remove();
+        }
+      })
+      .catch(() => { loading = false; });
+  }
+
+  const observer = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting) loadMore();
+  }, { rootMargin: '200px' });
+  observer.observe(loader);
+})();
+</script>
+<% } %>
 
 <%- include('partials/footer') %>

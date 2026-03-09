@@ -1,0 +1,36 @@
+CREATE TABLE IF NOT EXISTS tags (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  color VARCHAR(20) DEFAULT 'gray',
+  user_id INT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE KEY unique_tag (user_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS video_tags (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  video_id INT NOT NULL,
+  tag_id INT NOT NULL,
+  FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE,
+  FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE,
+  UNIQUE KEY unique_vt (video_id, tag_id)
+);
+
+CREATE TABLE IF NOT EXISTS playlists (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  user_id INT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS playlist_items (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  playlist_id INT NOT NULL,
+  video_id INT NOT NULL,
+  position INT NOT NULL DEFAULT 0,
+  FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE CASCADE,
+  FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE,
+  UNIQUE KEY unique_pi (playlist_id, video_id)
+)

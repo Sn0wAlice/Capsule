@@ -1,0 +1,79 @@
+<%- include('partials/header') %>
+
+<%
+function formatSize(bytes) {
+  if (!bytes) return '—';
+  const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
+  let i = 0;
+  let size = bytes;
+  while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
+  return size.toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
+}
+%>
+
+<div class="page-header">
+  <div>
+    <h1><%= playlist.name %></h1>
+    <p class="text-muted"><%= items.length %> vidéo(s)</p>
+  </div>
+  <div class="page-actions">
+    <a href="/playlists" class="btn btn-sm">← Playlists</a>
+    <form method="POST" action="/playlists/<%= playlist.id %>/delete" style="display:inline"
+          onsubmit="return confirm('Supprimer cette playlist ?')">
+      <button type="submit" class="btn btn-sm btn-danger">Supprimer</button>
+    </form>
+  </div>
+</div>
+
+<% if (items.length === 0) { %>
+  <div class="empty-state">
+    <p>Cette playlist est vide. Ajoutez des vidéos depuis le lecteur.</p>
+  </div>
+<% } else { %>
+  <div class="playlist-items" id="playlist-items">
+    <% for (let i = 0; i < items.length; i++) { const v = items[i]; %>
+      <div class="playlist-item" data-video-id="<%= v.id %>" data-position="<%= v.position %>">
+        <span class="playlist-handle" title="Glisser pour réordonner">⠿</span>
+        <span class="playlist-index"><%= i + 1 %></span>
+        <a href="/videos/<%= v.id %>" class="playlist-item-link">
+          <div class="playlist-item-thumb">
+            <% if (v.thumb) { %>
+              <img src="/videos/<%= v.id %>/thumb" alt="" loading="lazy">
+            <% } %>
+          </div>
+          <div class="playlist-item-info">
+            <span class="playlist-item-title"><%= v.title || v.filename %></span>
+            <span class="playlist-item-meta"><%= formatSize(v.size) %></span>
+          </div>
+        </a>
+        <button class="btn btn-sm btn-danger playlist-remove" data-video-id="<%= v.id %>"
+                title="Retirer de la playlist">&times;</button>
+      </div>
+    <% } %>
+  </div>
+<% } %>
+
+<script>
+  const PLAYLIST_ID = <%= playlist.id %>;
+
+  // Remove from playlist
+  document.querySelectorAll('.playlist-remove').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const videoId = btn.dataset.videoId;
+      fetch('/playlists/' + PLAYLIST_ID + '/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ video_id: videoId }),
+      }).then(r => r.json()).then(() => {
+        btn.closest('.playlist-item').remove();
+        // Update indices
+        document.querySelectorAll('.playlist-index').forEach((el, i) => {
+          el.textContent = i + 1;
+        });
+      }).catch(() => {});
+    });
+  });
+</script>
+
+<%- include('partials/footer') %>

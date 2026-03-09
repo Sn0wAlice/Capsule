@@ -6,15 +6,19 @@
 </div>
 
 <% if (videos.length > 0) { %>
-  <div class="file-list">
+  <div class="search-list">
     <% for (const video of videos) { %>
-      <a href="/videos/<%= video.id %>" class="file-item video-item">
-        <span class="file-icon">&#127909;</span>
-        <div class="file-info">
-          <span class="file-name"><%= video.title || video.filename %></span>
-          <span class="file-path"><%= video.library_name %> &mdash; <%= video.filepath %></span>
+      <a href="/videos/<%= video.id %>" class="search-item">
+        <div class="search-item-preview">
+          <% if (video.thumb) { %>
+            <img src="/videos/<%= video.id %>/thumb" alt="" loading="lazy">
+          <% } %>
         </div>
-        <span class="file-size"><%= formatSize(video.size) %></span>
+        <div class="search-item-info">
+          <span class="search-item-title"><%= video.title || video.filename %></span>
+          <span class="search-item-meta"><%= video.library_name %> &mdash; <%= video.filepath %></span>
+          <span class="search-item-meta"><%= formatSize(video.size) %></span>
+        </div>
       </a>
     <% } %>
   </div>

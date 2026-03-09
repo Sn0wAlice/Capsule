@@ -1,36 +1,168 @@
 <%- include('partials/header') %>
 
+<%
+function formatSize(bytes) {
+  if (!bytes) return '—';
+  const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
+  let i = 0;
+  let size = bytes;
+  while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
+  return size.toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
+}
+%>
+
 <div class="player-page">
-  <div class="player-header">
-    <a href="/libraries/<%= video.library_id %>" class="btn btn-sm">&larr; Retour</a>
-    <h2><%= video.title || video.filename %></h2>
-  </div>
-
-  <div class="player-container">
-    <div id="artplayer-app"></div>
-  </div>
-
-  <div class="video-details card">
-    <p><strong>Fichier :</strong> <%= video.filename %></p>
-    <p><strong>Chemin :</strong> <%= video.filepath %></p>
-    <p><strong>Bibliothèque :</strong> <%= video.library_name %></p>
-    <% if (video.size) { %>
-      <p><strong>Taille :</strong> <%
-        const bytes = video.size;
-        const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
-        let i = 0; let s = bytes;
-        while (s >= 1024 && i < units.length - 1) { s /= 1024; i++; }
-      %><%= s.toFixed(i > 0 ? 1 : 0) + ' ' + units[i] %></p>
+  <!-- Breadcrumb -->
+  <div class="player-breadcrumb">
+    <a href="/dashboard">Bibliothèques</a>
+    <span class="separator">/</span>
+    <a href="/libraries/<%= video.library_id %>"><%= video.library_name %></a>
+    <% for (const crumb of breadcrumb) { %>
+      <span class="separator">/</span>
+      <a href="/libraries/<%= video.library_id %>?view=folder&path=<%= encodeURIComponent(crumb.path) %>"><%= crumb.name %></a>
     <% } %>
+    <span class="separator">/</span>
+    <span class="current"><%= video.filename %></span>
   </div>
+
+  <div class="player-layout">
+    <!-- Left: Video Player -->
+    <div class="player-main">
+      <div class="player-container">
+        <div id="artplayer-app"></div>
+      </div>
+      <div class="player-title-bar">
+        <h1 class="player-title" id="video-title" title="Double-cliquer pour renommer"><%= video.title || video.filename %></h1>
+        <div class="player-actions">
+          <button class="btn btn-sm btn-fav<%= isFavorite ? ' active' : '' %>" id="btn-fav" title="Favoris (F)">
+            <span id="fav-icon"><%= isFavorite ? '&#9733;' : '&#9734;' %></span>
+          </button>
+          <% if (playlists.length > 0) { %>
+          <select id="add-to-playlist" class="autoplay-select" title="Ajouter à une playlist">
+            <option value="">+ Playlist</option>
+            <% for (const pl of playlists) { %>
+              <option value="<%= pl.id %>"><%= pl.name %></option>
+            <% } %>
+          </select>
+          <% } %>
+          <div class="autoplay-control">
+            <span class="autoplay-label">Auto</span>
+            <select id="autoplay-mode" class="autoplay-select">
+              <option value="off">Off</option>
+              <option value="random">Random</option>
+              <option value="alpha">A-Z</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tags -->
+      <div class="tags-bar">
+        <div class="tags-list" id="tags-list">
+          <% for (const tag of tags) { %>
+            <span class="tag tag-<%= tag.color %>" data-id="<%= tag.id %>">
+              <%= tag.name %>
+              <button class="tag-remove" data-id="<%= tag.id %>">&times;</button>
+            </span>
+          <% } %>
+        </div>
+        <form class="tag-add-form" id="tag-form">
+          <input type="text" id="tag-input" placeholder="+ tag" autocomplete="off">
+        </form>
+      </div>
+    </div>
+
+    <!-- Right: Info Panel -->
+    <div class="player-sidebar">
+      <div class="sidebar-section">
+        <h3>Informations</h3>
+        <div class="info-row">
+          <span class="info-label">Fichier</span>
+          <span class="info-value"><%= video.filename %></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Chemin</span>
+          <span class="info-value mono"><%= video.filepath %></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Bibliothèque</span>
+          <span class="info-value"><%= video.library_name %></span>
+        </div>
+        <% if (video.size) { %>
+        <div class="info-row">
+          <span class="info-label">Taille</span>
+          <span class="info-value"><%= formatSize(video.size) %></span>
+        </div>
+        <% } %>
+        <% if (video.mime_type) { %>
+        <div class="info-row">
+          <span class="info-label">Type</span>
+          <span class="info-value mono"><%= video.mime_type %></span>
+        </div>
+        <% } %>
+        <% if (video.thumb_filename) { %>
+        <div class="info-row">
+          <span class="info-label">Thumbnail</span>
+          <span class="info-value mono"><%= video.thumb_filename %></span>
+        </div>
+        <% } %>
+        <div class="info-row">
+          <span class="info-label">Ajouté le</span>
+          <span class="info-value"><%= new Date(video.created_at).toLocaleDateString('fr-FR') %></span>
+        </div>
+      </div>
+
+      <div class="sidebar-section sidebar-shortcuts">
+        <h3>Raccourcis</h3>
+        <div class="shortcut-row"><kbd>F</kbd> <span>Favoris</span></div>
+        <div class="shortcut-row"><kbd>N</kbd> <span>Vidéo suivante</span></div>
+        <div class="shortcut-row"><kbd>M</kbd> <span>Mode auto-play</span></div>
+        <div class="shortcut-row"><kbd>T</kbd> <span>Ajouter un tag</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Similar Videos -->
+  <% if (similar.length > 0) { %>
+  <div class="similar-section">
+    <h2>Autres vidéos</h2>
+    <div class="video-grid">
+      <% for (const v of similar) { %>
+        <a href="/videos/<%= v.id %>" class="video-card">
+          <div class="video-card-preview">
+            <% if (v.thumb) { %>
+              <img src="/videos/<%= v.id %>/thumb" alt="" loading="lazy">
+            <% } %>
+          </div>
+          <div class="video-card-info">
+            <span class="video-card-title"><%= v.title || v.filename %></span>
+            <span class="video-card-meta"><%= formatSize(v.size) %></span>
+          </div>
+        </a>
+      <% } %>
+    </div>
+  </div>
+  <% } %>
 </div>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/artplayer@5.2.1/dist/artplayer.css">
 <script src="https://cdn.jsdelivr.net/npm/artplayer@5.2.1/dist/artplayer.js"></script>
 <script>
+  const VIDEO_ID = <%= video.id %>;
+  const SAVED_PROGRESS = <%= savedProgress %>;
+
+  // Restore autoplay mode from localStorage
+  const autoplaySelect = document.getElementById('autoplay-mode');
+  const savedMode = localStorage.getItem('capsule_autoplay') || 'off';
+  autoplaySelect.value = savedMode;
+  autoplaySelect.addEventListener('change', () => {
+    localStorage.setItem('capsule_autoplay', autoplaySelect.value);
+  });
+
+  // Init ArtPlayer
   const art = new Artplayer({
     container: '#artplayer-app',
-    url: '/videos/<%= video.id %>/stream',
+    url: '/videos/' + VIDEO_ID + '/stream',
     type: '<%= video.mime_type === "video/x-matroska" ? "mkv" : "" %>',
     volume: 0.7,
     autoSize: true,
@@ -48,6 +180,187 @@
     miniProgressBar: true,
     playsInline: true,
     theme: '#8b5cf6',
+  });
+
+  // Resume playback
+  art.on('ready', () => {
+    if (SAVED_PROGRESS > 2) {
+      art.currentTime = SAVED_PROGRESS;
+    }
+  });
+
+  // Save progress every 5 seconds
+  let lastSaved = 0;
+  art.on('video:timeupdate', () => {
+    const now = Date.now();
+    if (now - lastSaved > 5000) {
+      lastSaved = now;
+      fetch('/videos/' + VIDEO_ID + '/progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ progress: art.currentTime }),
+      }).catch(() => {});
+    }
+  });
+
+  // Save on pause/close
+  function saveProgress() {
+    if (art.currentTime > 0) {
+      navigator.sendBeacon(
+        '/videos/' + VIDEO_ID + '/progress',
+        new Blob([JSON.stringify({ progress: art.currentTime })], { type: 'application/json' })
+      );
+    }
+  }
+  art.on('video:pause', saveProgress);
+  window.addEventListener('beforeunload', saveProgress);
+
+  // Auto-start if navigated via autoplay
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('autoplay') === '1') {
+    art.on('ready', () => { art.play(); });
+  }
+
+  // Auto-play next on video end
+  art.on('video:ended', () => {
+    const mode = autoplaySelect.value;
+    if (mode === 'off') return;
+    fetch('/videos/' + VIDEO_ID + '/next?mode=' + mode)
+      .then(r => r.json())
+      .then(data => {
+        if (data.id) window.location.href = '/videos/' + data.id + '?autoplay=1';
+      })
+      .catch(() => {});
+  });
+
+  // Go to next video
+  function goNext() {
+    const mode = autoplaySelect.value === 'off' ? 'random' : autoplaySelect.value;
+    fetch('/videos/' + VIDEO_ID + '/next?mode=' + mode)
+      .then(r => r.json())
+      .then(data => {
+        if (data.id) window.location.href = '/videos/' + data.id + '?autoplay=1';
+      })
+      .catch(() => {});
+  }
+
+  // Toggle favorite
+  const btnFav = document.getElementById('btn-fav');
+  const favIcon = document.getElementById('fav-icon');
+  function toggleFav() {
+    fetch('/videos/' + VIDEO_ID + '/favorite', { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        favIcon.innerHTML = data.favorited ? '&#9733;' : '&#9734;';
+        btnFav.classList.toggle('active', data.favorited);
+      })
+      .catch(() => {});
+  }
+  btnFav.addEventListener('click', toggleFav);
+
+  // Cycle autoplay mode
+  function cycleAutoplay() {
+    const modes = ['off', 'random', 'alpha'];
+    const idx = modes.indexOf(autoplaySelect.value);
+    autoplaySelect.value = modes[(idx + 1) % modes.length];
+    localStorage.setItem('capsule_autoplay', autoplaySelect.value);
+  }
+
+  // Inline rename (double-click title)
+  const titleEl = document.getElementById('video-title');
+  titleEl.addEventListener('dblclick', () => {
+    const current = titleEl.textContent.trim();
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = current;
+    input.className = 'rename-input';
+    titleEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    function save() {
+      const newTitle = input.value.trim();
+      fetch('/videos/' + VIDEO_ID + '/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTitle }),
+      }).then(r => r.json()).then(data => {
+        titleEl.textContent = data.title || '<%= video.filename.replace(/'/g, "\\'") %>';
+        input.replaceWith(titleEl);
+      }).catch(() => {
+        titleEl.textContent = current;
+        input.replaceWith(titleEl);
+      });
+    }
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+      if (e.key === 'Escape') { titleEl.textContent = current; input.replaceWith(titleEl); }
+    });
+  });
+
+  // Tags
+  const tagsList = document.getElementById('tags-list');
+  const tagForm = document.getElementById('tag-form');
+  const tagInput = document.getElementById('tag-input');
+
+  tagForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = tagInput.value.trim();
+    if (!name) return;
+    fetch('/videos/' + VIDEO_ID + '/tags', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }).then(r => r.json()).then(data => {
+      if (data.tag) {
+        const span = document.createElement('span');
+        span.className = 'tag tag-' + data.tag.color;
+        span.dataset.id = data.tag.id;
+        span.innerHTML = data.tag.name + ' <button class="tag-remove" data-id="' + data.tag.id + '">&times;</button>';
+        tagsList.appendChild(span);
+        tagInput.value = '';
+      }
+    }).catch(() => {});
+  });
+
+  tagsList.addEventListener('click', (e) => {
+    if (e.target.classList.contains('tag-remove')) {
+      const tagId = e.target.dataset.id;
+      fetch('/videos/' + VIDEO_ID + '/tags/' + tagId, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(() => {
+          e.target.parentElement.remove();
+        })
+        .catch(() => {});
+    }
+  });
+
+  // Add to playlist
+  const playlistSelect = document.getElementById('add-to-playlist');
+  if (playlistSelect) {
+    playlistSelect.addEventListener('change', () => {
+      const plId = playlistSelect.value;
+      if (!plId) return;
+      fetch('/playlists/' + plId + '/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ video_id: VIDEO_ID }),
+      }).then(r => r.json()).then(() => {
+        playlistSelect.value = '';
+      }).catch(() => {});
+    });
+  }
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+    switch (e.key.toLowerCase()) {
+      case 'f': e.preventDefault(); toggleFav(); break;
+      case 'n': e.preventDefault(); goNext(); break;
+      case 'm': e.preventDefault(); cycleAutoplay(); break;
+      case 't': e.preventDefault(); tagInput.focus(); break;
+    }
   });
 </script>
 
