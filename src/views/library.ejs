@@ -58,7 +58,9 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
   </div>
 </div>
 
-<% if (scanned) { %>
+<% if (scanned === 'bg') { %>
+  <div class="alert alert-success">Traitement lancé en arrière-plan.</div>
+<% } else if (scanned) { %>
   <div class="alert alert-success">Scan terminé : <%= scanned %> fichier(s) trouvé(s)</div>
 <% } %>
 <% if (error) { %>
@@ -179,10 +181,16 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
         <a href="/videos/<%= video.id %>" class="video-card">
           <div class="video-card-preview"<% if (video.sprite) { %> data-sprite="/videos/<%= video.id %>/sprite"<% } %>>
             <% if (video.thumb) { %>
-              <img src="/videos/<%= video.id %>/thumb" alt="" loading="lazy" class="thumb-static">
+              <img src="/videos/<%= video.id %>/thumb" alt="" loading="lazy" decoding="async" class="thumb-static">
             <% } %>
             <% if (video.sprite) { %>
-              <img src="/videos/<%= video.id %>/sprite" alt="" loading="lazy" class="thumb-sprite">
+              <img src="/videos/<%= video.id %>/sprite" alt="" loading="lazy" decoding="async" class="thumb-sprite">
+            <% } %>
+            <% if (video.duration) { %>
+              <span class="video-card-duration"><%= formatDuration(video.duration) %></span>
+            <% } %>
+            <% if (video.view_count > 0) { %>
+              <span class="video-card-views"><%= video.view_count %> vue<%= video.view_count > 1 ? 's' : '' %></span>
             <% } %>
           </div>
           <div class="video-card-info">
@@ -254,8 +262,10 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
             card.className = 'video-card';
             card.innerHTML =
               '<div class="video-card-preview"' + (v.sprite ? ' data-sprite="/videos/' + v.id + '/sprite"' : '') + '>' +
-              (v.thumb ? '<img src="/videos/' + v.id + '/thumb" alt="" loading="lazy" class="thumb-static">' : '') +
-              (v.sprite ? '<img src="/videos/' + v.id + '/sprite" alt="" loading="lazy" class="thumb-sprite">' : '') +
+              (v.thumb ? '<img src="/videos/' + v.id + '/thumb" alt="" loading="lazy" decoding="async" class="thumb-static">' : '') +
+              (v.sprite ? '<img src="/videos/' + v.id + '/sprite" alt="" loading="lazy" decoding="async" class="thumb-sprite">' : '') +
+              (v.duration ? '<span class="video-card-duration">' + formatDuration(v.duration) + '</span>' : '') +
+              (v.view_count > 0 ? '<span class="video-card-views">' + v.view_count + ' vue' + (v.view_count > 1 ? 's' : '') + '</span>' : '') +
               '</div><div class="video-card-info">' +
               '<span class="video-card-title">' + (v.title || v.filename).replace(/</g, '&lt;') + '</span>' +
               '<span class="video-card-meta">' + formatSize(v.size) + '</span></div>';

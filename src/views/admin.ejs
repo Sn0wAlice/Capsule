@@ -88,8 +88,8 @@
         <% for (const j of jobs) { %>
           <tr>
             <td class="muted"><%= j.id %></td>
-            <td><%= j.filename %></td>
-            <td class="muted"><%= j.library_name %></td>
+            <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="<%= j.filename %>"><%= j.filename %></td>
+            <td class="muted" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="<%= j.library_name %>"><%= j.library_name %></td>
             <td>
               <span class="badge <%= j.status === 'processing' ? 'badge-accent' : j.status === 'pending' ? 'badge-info' : j.status === 'failed' ? 'badge-danger' : 'badge-success' %>"><%= j.status %></span>
             </td>

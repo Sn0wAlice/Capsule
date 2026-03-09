@@ -59,14 +59,15 @@ function extractMetadata(probeData) {
 
 // ── Thumbnail ──
 
-function generateThumbnail(videoPath, libraryPath) {
+function generateThumbnail(videoPath, libraryPath, duration) {
   const thumbDir = path.join(libraryPath, CAPSULE_DIR);
   fs.mkdirSync(thumbDir, { recursive: true });
   const thumbName = crypto.randomUUID() + '.jpg';
   const thumbPath = path.join(thumbDir, thumbName);
+  const seekTo = duration ? Math.max(1, Math.floor(duration * 0.1)) : 15;
   try {
     execFileSync('ffmpeg', [
-      '-ss', '15', '-i', videoPath,
+      '-ss', String(seekTo), '-i', videoPath,
       '-vframes', '1', '-vf', 'scale=320:-2',
       '-q:v', '8', '-y', thumbPath,
     ], { timeout: 15000, stdio: 'pipe' });
@@ -143,16 +144,7 @@ async function processJob(job) {
       return;
     }
 
-    // 1. Thumbnail
-    const [existingThumb] = await pool.execute('SELECT id FROM thumbnails WHERE video_id = ?', [video_id]);
-    if (existingThumb.length === 0) {
-      const thumbName = generateThumbnail(video_path, library_path);
-      if (thumbName) {
-        await pool.execute('INSERT INTO thumbnails (video_id, filename) VALUES (?, ?)', [video_id, thumbName]);
-      }
-    }
-
-    // 2. Metadata
+    // 1. Metadata (probe first to get duration)
     let videoDuration = videoRows[0].duration;
     if (videoDuration === null) {
       const probeData = await probeVideo(video_path);
@@ -165,6 +157,15 @@ async function processJob(job) {
           [meta.duration || null, meta.width || null, meta.height || null,
            meta.codec || null, meta.audio_codec || null, meta.bitrate || null, video_id]
         );
+      }
+    }
+
+    // 2. Thumbnail (at 10% of duration)
+    const [existingThumb] = await pool.execute('SELECT id FROM thumbnails WHERE video_id = ?', [video_id]);
+    if (existingThumb.length === 0) {
+      const thumbName = generateThumbnail(video_path, library_path, videoDuration);
+      if (thumbName) {
+        await pool.execute('INSERT INTO thumbnails (video_id, filename) VALUES (?, ?)', [video_id, thumbName]);
       }
     }
 

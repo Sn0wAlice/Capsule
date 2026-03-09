@@ -9,6 +9,14 @@ function formatSize(bytes) {
   while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
   return size.toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
 }
+function formatDuration(seconds) {
+  if (!seconds) return '';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  return m + ':' + String(s).padStart(2, '0');
+}
 %>
 
 <div class="page-header">
@@ -28,7 +36,10 @@ function formatSize(bytes) {
         <a href="/videos/<%= v.id %>" class="video-card">
           <div class="video-card-preview">
             <% if (v.thumb) { %>
-              <img src="/videos/<%= v.id %>/thumb" alt="" loading="lazy">
+              <img src="/videos/<%= v.id %>/thumb" alt="" loading="lazy" decoding="async">
+            <% } %>
+            <% if (v.duration) { %>
+              <span class="video-card-duration"><%= formatDuration(v.duration) %></span>
             <% } %>
           </div>
           <div class="video-card-info">
@@ -50,7 +61,10 @@ function formatSize(bytes) {
         <a href="/videos/<%= v.id %>" class="video-card">
           <div class="video-card-preview">
             <% if (v.thumb) { %>
-              <img src="/videos/<%= v.id %>/thumb" alt="" loading="lazy">
+              <img src="/videos/<%= v.id %>/thumb" alt="" loading="lazy" decoding="async">
+            <% } %>
+            <% if (v.duration) { %>
+              <span class="video-card-duration"><%= formatDuration(v.duration) %></span>
             <% } %>
           </div>
           <div class="video-card-info">

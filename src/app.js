@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
 const MySQLStore = require('express-mysql-session')(session);
+const compression = require('compression');
 const path = require('path');
 
 const pool = require('./config/database');
@@ -10,6 +11,9 @@ const migrate = require('./config/migrate');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Gzip/Brotli compression
+app.use(compression());
 
 // View engine
 app.set('view engine', 'ejs');
@@ -19,8 +23,11 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// Static files
-app.use(express.static(path.join(__dirname, 'public')));
+// Static files with cache
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: '7d',
+  etag: true,
+}));
 
 // Session store
 const sessionStore = new MySQLStore({
@@ -141,7 +148,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     let history = [];
     if (libIds.length > 0) {
       [history] = await pool.query(
-        `SELECT v.id, v.filename, v.title, v.size, t.filename as thumb, wh.watched_at, wh.progress
+        `SELECT v.id, v.filename, v.title, v.size, v.duration, t.filename as thumb, wh.watched_at, wh.progress
          FROM watch_history wh
          JOIN videos v ON v.id = wh.video_id
          JOIN libraries l ON l.id = v.library_id
@@ -157,7 +164,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     let favorites = [];
     if (libIds.length > 0) {
       [favorites] = await pool.query(
-        `SELECT v.id, v.filename, v.title, v.size, t.filename as thumb
+        `SELECT v.id, v.filename, v.title, v.size, v.duration, t.filename as thumb
          FROM favorites f
          JOIN videos v ON v.id = f.video_id
          JOIN libraries l ON l.id = v.library_id
