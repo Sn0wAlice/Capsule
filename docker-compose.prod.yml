@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/Sn0wAlice/capsule:latest
+    image: ghcr.io/sn0walice/capsule:latest
     ports:
       - "${PORT:-3000}:3000"
     environment:
