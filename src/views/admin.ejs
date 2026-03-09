@@ -62,4 +62,44 @@
   </table>
 </div>
 
+<div class="card" style="margin-top: 2rem;">
+  <h2>File d'attente
+    <span class="text-muted" style="font-size:0.85rem; font-weight:400; margin-left:0.5rem;">
+      <% for (const s of jobStats) { %>
+        <span class="badge <%= s.status === 'processing' ? 'badge-accent' : s.status === 'pending' ? 'badge-info' : s.status === 'failed' ? 'badge-danger' : 'badge-success' %>"><%= s.count %> <%= s.status %></span>
+      <% } %>
+    </span>
+  </h2>
+  <% if (jobs.length === 0) { %>
+    <p class="text-muted">Aucun job en attente.</p>
+  <% } else { %>
+    <table class="video-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Vidéo</th>
+          <th>Bibliothèque</th>
+          <th>Statut</th>
+          <th>Créé</th>
+          <th>Erreur</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% for (const j of jobs) { %>
+          <tr>
+            <td class="muted"><%= j.id %></td>
+            <td><%= j.filename %></td>
+            <td class="muted"><%= j.library_name %></td>
+            <td>
+              <span class="badge <%= j.status === 'processing' ? 'badge-accent' : j.status === 'pending' ? 'badge-info' : j.status === 'failed' ? 'badge-danger' : 'badge-success' %>"><%= j.status %></span>
+            </td>
+            <td class="muted"><%= new Date(j.created_at).toLocaleString('fr-FR') %></td>
+            <td class="muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="<%= j.error || '' %>"><%= j.error || '—' %></td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  <% } %>
+</div>
+
 <%- include('partials/footer') %>

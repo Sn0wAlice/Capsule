@@ -17,9 +17,26 @@ router.get('/', async (req, res) => {
        GROUP BY u.id
        ORDER BY u.created_at ASC`
     );
+
+    const [jobs] = await pool.execute(
+      `SELECT j.id, j.status, j.created_at, j.started_at, j.finished_at, j.error,
+              v.filename, l.name as library_name
+       FROM jobs j
+       JOIN videos v ON v.id = j.video_id
+       JOIN libraries l ON l.id = v.library_id
+       ORDER BY FIELD(j.status, 'processing', 'pending', 'failed', 'done'), j.created_at ASC
+       LIMIT 10`
+    );
+
+    const [jobStats] = await pool.execute(
+      `SELECT status, COUNT(*) as count FROM jobs GROUP BY status`
+    );
+
     res.render('admin', {
       pageTitle: 'Administration',
       users,
+      jobs,
+      jobStats,
       success: req.query.success || null,
       error: req.query.error || null,
     });

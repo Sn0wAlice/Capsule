@@ -1458,6 +1458,26 @@ a:hover {
   color: #16a34a;
 }
 
+.badge-danger {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+.badge-accent {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fcd34d;
+}
+
+[data-theme="light"] .badge-danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: #dc2626;
+}
+
+[data-theme="light"] .badge-accent {
+  background: rgba(251, 191, 36, 0.15);
+  color: #d97706;
+}
+
 /* === Share Modal === */
 
 .modal-overlay {
