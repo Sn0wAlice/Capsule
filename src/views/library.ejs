@@ -1,16 +1,56 @@
 <%- include('partials/header') %>
 
+<%
+function formatSize(bytes) {
+  if (!bytes) return '—';
+  const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
+  let i = 0;
+  let size = bytes;
+  while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
+  return size.toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
+}
+function formatDuration(seconds) {
+  if (!seconds) return '—';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  return m + ':' + String(s).padStart(2, '0');
+}
+const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
+%>
+
 <div class="page-header">
   <div>
     <h1><%= library.name %></h1>
-    <p class="text-muted"><%= library.path %> &mdash; <%= totalVideos %> vidéo(s)</p>
+    <p class="text-muted"><%= library.path %> &mdash; <%= totalVideos %> vidéo(s)
+      <% if (permission === 'read') { %>
+        <span class="badge badge-info">Lecture seule</span>
+      <% } else if (permission === 'write') { %>
+        <span class="badge badge-success">Lecture/Écriture</span>
+      <% } %>
+    </p>
   </div>
   <div class="page-actions">
+    <% if (['owner','admin','write'].includes(permission)) { %>
     <form method="POST" action="/libraries/<%= library.id %>/scan" style="display:inline">
       <button type="submit" class="btn btn-primary">Scanner</button>
     </form>
+    <% } %>
     <a href="/libraries/<%= library.id %>?view=folder" class="btn btn-sm <%= viewMode === 'folder' ? 'btn-active' : '' %>">Dossiers</a>
     <a href="/libraries/<%= library.id %>?view=flat" class="btn btn-sm <%= viewMode === 'flat' ? 'btn-active' : '' %>">Tout</a>
+    <% if (viewMode === 'flat') { %>
+    <div class="view-toggles">
+      <a href="/libraries/<%= library.id %>?view=flat&sort=<%= sort %>&order=<%= order %>&display=grid"
+         class="view-toggle-btn <%= displayMode === 'grid' ? 'active' : '' %>" title="Grille">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      </a>
+      <a href="/libraries/<%= library.id %>?view=flat&sort=<%= sort %>&order=<%= order %>&display=list"
+         class="view-toggle-btn <%= displayMode === 'list' ? 'active' : '' %>" title="Liste">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="4" width="18" height="2" rx="1"/><rect x="3" y="11" width="18" height="2" rx="1"/><rect x="3" y="18" width="18" height="2" rx="1"/></svg>
+      </a>
+    </div>
+    <% } %>
   </div>
 </div>
 
@@ -58,41 +98,97 @@
 <% } %>
 
 <% if (viewMode === 'flat') { %>
-  <!-- Sort controls -->
+  <!-- Sort controls (grid mode only) -->
+  <% if (displayMode === 'grid') { %>
   <div class="sort-controls">
     Trier par :
-    <a href="/libraries/<%= library.id %>?view=flat&sort=name&order=<%= sort === 'name' && order === 'asc' ? 'desc' : 'asc' %>"
+    <a href="/libraries/<%= library.id %>?view=flat&sort=name&order=<%= sort === 'name' && order === 'asc' ? 'desc' : 'asc' %>&display=grid"
        class="<%= sort === 'name' ? 'active' : '' %>">
       Nom <%= sort === 'name' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
     </a>
-    <a href="/libraries/<%= library.id %>?view=flat&sort=date&order=<%= sort === 'date' && order === 'desc' ? 'asc' : 'desc' %>"
+    <a href="/libraries/<%= library.id %>?view=flat&sort=date&order=<%= sort === 'date' && order === 'desc' ? 'asc' : 'desc' %>&display=grid"
        class="<%= sort === 'date' ? 'active' : '' %>">
       Date <%= sort === 'date' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
     </a>
-    <a href="/libraries/<%= library.id %>?view=flat&sort=size&order=<%= sort === 'size' && order === 'desc' ? 'asc' : 'desc' %>"
+    <a href="/libraries/<%= library.id %>?view=flat&sort=size&order=<%= sort === 'size' && order === 'desc' ? 'asc' : 'desc' %>&display=grid"
        class="<%= sort === 'size' ? 'active' : '' %>">
       Taille <%= sort === 'size' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
     </a>
   </div>
+  <% } %>
 <% } %>
 
-<!-- Video grid -->
+<!-- Videos -->
 <% if (videos.length > 0) { %>
-  <div class="video-grid" id="video-grid">
-    <% for (const video of videos) { %>
-      <a href="/videos/<%= video.id %>" class="video-card">
-        <div class="video-card-preview">
-          <% if (video.thumb) { %>
-            <img src="/videos/<%= video.id %>/thumb" alt="" loading="lazy">
-          <% } %>
-        </div>
-        <div class="video-card-info">
-          <span class="video-card-title"><%= video.title || video.filename %></span>
-          <span class="video-card-meta"><%= formatSize(video.size) %></span>
-        </div>
-      </a>
-    <% } %>
-  </div>
+  <% if (displayMode === 'list' && viewMode === 'flat') { %>
+    <!-- List View -->
+    <table class="video-table">
+      <thead>
+        <tr>
+          <th class="<%= sort === 'name' ? 'sorted' : '' %>">
+            <a href="/libraries/<%= library.id %>?view=flat&sort=name&order=<%= sort === 'name' && order === 'asc' ? 'desc' : 'asc' %>&display=list"
+               style="color:inherit;text-decoration:none">
+              Nom <%= sort === 'name' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
+            </a>
+          </th>
+          <th class="<%= sort === 'size' ? 'sorted' : '' %>">
+            <a href="/libraries/<%= library.id %>?view=flat&sort=size&order=<%= sort === 'size' && order === 'desc' ? 'asc' : 'desc' %>&display=list"
+               style="color:inherit;text-decoration:none">
+              Taille <%= sort === 'size' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
+            </a>
+          </th>
+          <th>Durée</th>
+          <th>Vues</th>
+          <th class="<%= sort === 'date' ? 'sorted' : '' %>">
+            <a href="/libraries/<%= library.id %>?view=flat&sort=date&order=<%= sort === 'date' && order === 'desc' ? 'asc' : 'desc' %>&display=list"
+               style="color:inherit;text-decoration:none">
+              Date <%= sort === 'date' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
+            </a>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <% for (const video of videos) { %>
+          <tr>
+            <td>
+              <a href="/videos/<%= video.id %>" class="video-table-link">
+                <div class="video-table-thumb">
+                  <% if (video.thumb) { %>
+                    <img src="/videos/<%= video.id %>/thumb" alt="" loading="lazy">
+                  <% } %>
+                </div>
+                <span class="video-table-name"><%= video.title || video.filename %></span>
+              </a>
+            </td>
+            <td class="muted"><%= formatSize(video.size) %></td>
+            <td class="muted"><%= formatDuration(video.duration) %></td>
+            <td class="muted"><%= video.view_count || 0 %></td>
+            <td class="muted"><%= new Date(video.updated_at || video.created_at).toLocaleDateString('fr-FR') %></td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  <% } else { %>
+    <!-- Grid View -->
+    <div class="video-grid" id="video-grid">
+      <% for (const video of videos) { %>
+        <a href="/videos/<%= video.id %>" class="video-card">
+          <div class="video-card-preview"<% if (video.sprite) { %> data-sprite="/videos/<%= video.id %>/sprite"<% } %>>
+            <% if (video.thumb) { %>
+              <img src="/videos/<%= video.id %>/thumb" alt="" loading="lazy" class="thumb-static">
+            <% } %>
+            <% if (video.sprite) { %>
+              <img src="/videos/<%= video.id %>/sprite" alt="" loading="lazy" class="thumb-sprite">
+            <% } %>
+          </div>
+          <div class="video-card-info">
+            <span class="video-card-title"><%= video.title || video.filename %></span>
+            <span class="video-card-meta"><%= formatSize(video.size) %></span>
+          </div>
+        </a>
+      <% } %>
+    </div>
+  <% } %>
   <% if (hasMore) { %>
     <div id="load-more" class="load-more">
       <div class="loader"></div>
@@ -104,22 +200,13 @@
   </div>
 <% } %>
 
-<%
-function formatSize(bytes) {
-  if (!bytes) return '—';
-  const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
-  let i = 0;
-  let size = bytes;
-  while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
-  return size.toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
-}
-%>
-
 <% if (viewMode === 'flat' && hasMore) { %>
 <script>
 (function() {
-  const grid = document.getElementById('video-grid');
+  const container = document.getElementById('video-grid') || document.querySelector('.video-table tbody');
   const loader = document.getElementById('load-more');
+  if (!loader) return;
+  const isTable = !document.getElementById('video-grid');
   let page = 2;
   let loading = false;
   let done = false;
@@ -131,38 +218,49 @@ function formatSize(bytes) {
     while (s >= 1024 && i < units.length - 1) { s /= 1024; i++; }
     return s.toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
   }
+  function formatDuration(sec) {
+    if (!sec) return '—';
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60);
+    if (h > 0) return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+    return m + ':' + String(s).padStart(2, '0');
+  }
 
   function loadMore() {
     if (loading || done) return;
     loading = true;
-    const params = new URLSearchParams({
-      page: page,
-      sort: '<%= sort %>',
-      order: '<%= order %>'
-    });
+    const params = new URLSearchParams({ page: page, sort: '<%= sort %>', order: '<%= order %>' });
     fetch('/libraries/<%= library.id %>/videos?' + params)
       .then(r => r.json())
       .then(data => {
         for (const v of data.videos) {
-          const card = document.createElement('a');
-          card.href = '/videos/' + v.id;
-          card.className = 'video-card';
-          card.innerHTML =
-            '<div class="video-card-preview">' +
-            (v.thumb ? '<img src="/videos/' + v.id + '/thumb" alt="" loading="lazy">' : '') +
-            '</div>' +
-            '<div class="video-card-info">' +
-            '<span class="video-card-title">' + (v.title || v.filename).replace(/</g, '&lt;') + '</span>' +
-            '<span class="video-card-meta">' + formatSize(v.size) + '</span>' +
-            '</div>';
-          grid.appendChild(card);
+          if (isTable) {
+            const tr = document.createElement('tr');
+            tr.innerHTML =
+              '<td><a href="/videos/' + v.id + '" class="video-table-link">' +
+              '<div class="video-table-thumb">' + (v.thumb ? '<img src="/videos/' + v.id + '/thumb" alt="" loading="lazy">' : '') + '</div>' +
+              '<span class="video-table-name">' + (v.title || v.filename).replace(/</g, '&lt;') + '</span></a></td>' +
+              '<td class="muted">' + formatSize(v.size) + '</td>' +
+              '<td class="muted">' + formatDuration(v.duration) + '</td>' +
+              '<td class="muted">' + (v.view_count || 0) + '</td>' +
+              '<td class="muted">' + new Date(v.updated_at || v.created_at).toLocaleDateString('fr-FR') + '</td>';
+            container.appendChild(tr);
+          } else {
+            const card = document.createElement('a');
+            card.href = '/videos/' + v.id;
+            card.className = 'video-card';
+            card.innerHTML =
+              '<div class="video-card-preview"' + (v.sprite ? ' data-sprite="/videos/' + v.id + '/sprite"' : '') + '>' +
+              (v.thumb ? '<img src="/videos/' + v.id + '/thumb" alt="" loading="lazy" class="thumb-static">' : '') +
+              (v.sprite ? '<img src="/videos/' + v.id + '/sprite" alt="" loading="lazy" class="thumb-sprite">' : '') +
+              '</div><div class="video-card-info">' +
+              '<span class="video-card-title">' + (v.title || v.filename).replace(/</g, '&lt;') + '</span>' +
+              '<span class="video-card-meta">' + formatSize(v.size) + '</span></div>';
+            container.appendChild(card);
+          }
         }
         page++;
         loading = false;
-        if (!data.hasMore) {
-          done = true;
-          loader.remove();
-        }
+        if (!data.hasMore) { done = true; loader.remove(); }
       })
       .catch(() => { loading = false; });
   }

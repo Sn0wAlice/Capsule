@@ -2,24 +2,44 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const pool = require('../config/database');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, getLibraryAccess, getAccessibleLibraryIds, canWrite } = require('../middleware/auth');
 const { CAPSULE_DIR } = require('../services/scanner');
 
 const router = express.Router();
 router.use(requireAuth);
 
+// Helper: get video with library info and check access
+async function getVideoWithAccess(videoId, userId, userRole) {
+  const [rows] = await pool.execute(
+    `SELECT v.*, l.path as library_path, l.name as library_name, l.user_id as library_owner_id,
+            t.filename as thumb_filename
+     FROM videos v
+     JOIN libraries l ON l.id = v.library_id
+     LEFT JOIN thumbnails t ON t.video_id = v.id
+     WHERE v.id = ?`,
+    [videoId]
+  );
+  if (rows.length === 0) return { video: null, access: { allowed: false, permission: null } };
+  const video = rows[0];
+  const access = await getLibraryAccess(userId, video.library_id, userRole);
+  return { video, access };
+}
+
 // Serve thumbnail
 router.get('/:id/thumb', async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      `SELECT t.filename, l.path as library_path
+      `SELECT t.filename, l.path as library_path, v.library_id
        FROM thumbnails t
        JOIN videos v ON v.id = t.video_id
        JOIN libraries l ON l.id = v.library_id
-       WHERE t.video_id = ? AND l.user_id = ?`,
-      [req.params.id, req.session.user.id]
+       WHERE t.video_id = ?`,
+      [req.params.id]
     );
     if (rows.length === 0) return res.status(404).send('');
+
+    const access = await getLibraryAccess(req.session.user.id, rows[0].library_id, req.session.user.role);
+    if (!access.allowed) return res.status(404).send('');
 
     const thumbPath = path.join(rows[0].library_path, CAPSULE_DIR, rows[0].filename);
     if (!fs.existsSync(thumbPath)) return res.status(404).send('');
@@ -33,7 +53,35 @@ router.get('/:id/thumb', async (req, res) => {
   }
 });
 
-// Save playback progress
+// Serve sprite preview
+router.get('/:id/sprite', async (req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT t.sprite_filename, l.path as library_path, v.library_id
+       FROM thumbnails t
+       JOIN videos v ON v.id = t.video_id
+       JOIN libraries l ON l.id = v.library_id
+       WHERE t.video_id = ? AND t.sprite_filename IS NOT NULL`,
+      [req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).send('');
+
+    const access = await getLibraryAccess(req.session.user.id, rows[0].library_id, req.session.user.role);
+    if (!access.allowed) return res.status(404).send('');
+
+    const spritePath = path.join(rows[0].library_path, CAPSULE_DIR, rows[0].sprite_filename);
+    if (!fs.existsSync(spritePath)) return res.status(404).send('');
+
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    fs.createReadStream(spritePath).pipe(res);
+  } catch (err) {
+    console.error('Sprite error:', err);
+    res.status(500).send('');
+  }
+});
+
+// Save playback progress (user-scoped, no library check needed)
 router.post('/:id/progress', async (req, res) => {
   const progress = parseFloat(req.body.progress) || 0;
   try {
@@ -50,7 +98,7 @@ router.post('/:id/progress', async (req, res) => {
   }
 });
 
-// Toggle favorite
+// Toggle favorite (user-scoped)
 router.post('/:id/favorite', async (req, res) => {
   try {
     const [existing] = await pool.execute(
@@ -74,34 +122,34 @@ router.post('/:id/favorite', async (req, res) => {
 
 // Next video (for auto-play)
 router.get('/:id/next', async (req, res) => {
-  const mode = req.query.mode || 'random'; // 'random' or 'alpha'
+  const mode = req.query.mode || 'random';
   try {
     const [videoRows] = await pool.execute(
-      `SELECT v.library_id, v.filename FROM videos v
-       JOIN libraries l ON l.id = v.library_id
-       WHERE v.id = ? AND l.user_id = ?`,
-      [req.params.id, req.session.user.id]
+      'SELECT v.library_id, v.filename FROM videos v WHERE v.id = ?',
+      [req.params.id]
     );
     if (videoRows.length === 0) return res.json({ id: null });
+
+    const access = await getLibraryAccess(req.session.user.id, videoRows[0].library_id, req.session.user.role);
+    if (!access.allowed) return res.json({ id: null });
 
     const { library_id, filename } = videoRows[0];
     let nextRows;
 
     if (mode === 'alpha') {
-      // Next alphabetically, wrap around
       [nextRows] = await pool.execute(
-        `SELECT id FROM videos WHERE library_id = ? AND filename > ? ORDER BY filename ASC LIMIT 1`,
+        'SELECT id FROM videos WHERE library_id = ? AND filename > ? ORDER BY filename ASC LIMIT 1',
         [library_id, filename]
       );
       if (nextRows.length === 0) {
         [nextRows] = await pool.execute(
-          `SELECT id FROM videos WHERE library_id = ? ORDER BY filename ASC LIMIT 1`,
+          'SELECT id FROM videos WHERE library_id = ? ORDER BY filename ASC LIMIT 1',
           [library_id]
         );
       }
     } else {
       [nextRows] = await pool.execute(
-        `SELECT id FROM videos WHERE library_id = ? AND id != ? ORDER BY RAND() LIMIT 1`,
+        'SELECT id FROM videos WHERE library_id = ? AND id != ? ORDER BY RAND() LIMIT 1',
         [library_id, req.params.id]
       );
     }
@@ -113,16 +161,20 @@ router.get('/:id/next', async (req, res) => {
   }
 });
 
-// Rename video title (AJAX)
+// Rename video title (AJAX - requires write permission)
 router.post('/:id/rename', async (req, res) => {
   const title = (req.body.title || '').trim();
   try {
-    const [check] = await pool.execute(
-      `SELECT v.id FROM videos v JOIN libraries l ON l.id = v.library_id
-       WHERE v.id = ? AND l.user_id = ?`,
-      [req.params.id, req.session.user.id]
+    const [videoRows] = await pool.execute(
+      'SELECT v.id, v.library_id FROM videos v WHERE v.id = ?', [req.params.id]
     );
-    if (check.length === 0) return res.status(404).json({ error: 'not found' });
+    if (videoRows.length === 0) return res.status(404).json({ error: 'not found' });
+
+    const access = await getLibraryAccess(req.session.user.id, videoRows[0].library_id, req.session.user.role);
+    if (!access.allowed || !canWrite(access.permission)) {
+      return res.status(403).json({ error: 'permission denied' });
+    }
+
     await pool.execute('UPDATE videos SET title = ? WHERE id = ?', [title || null, req.params.id]);
     res.json({ ok: true, title });
   } catch (err) {
@@ -131,13 +183,22 @@ router.post('/:id/rename', async (req, res) => {
   }
 });
 
-// Add tag to video (AJAX)
+// Add tag to video (AJAX - requires write permission)
 router.post('/:id/tags', async (req, res) => {
   const name = (req.body.name || '').trim().toLowerCase();
   const color = req.body.color || 'gray';
   if (!name) return res.status(400).json({ error: 'name required' });
   try {
-    // Create tag if not exists
+    const [videoRows] = await pool.execute(
+      'SELECT library_id FROM videos WHERE id = ?', [req.params.id]
+    );
+    if (videoRows.length === 0) return res.status(404).json({ error: 'not found' });
+
+    const access = await getLibraryAccess(req.session.user.id, videoRows[0].library_id, req.session.user.role);
+    if (!access.allowed || !canWrite(access.permission)) {
+      return res.status(403).json({ error: 'permission denied' });
+    }
+
     await pool.execute(
       'INSERT IGNORE INTO tags (name, color, user_id) VALUES (?, ?, ?)',
       [name, color, req.session.user.id]
@@ -149,7 +210,6 @@ router.post('/:id/tags', async (req, res) => {
     if (tagRows.length === 0) return res.status(500).json({ error: 'tag creation failed' });
     const tag = tagRows[0];
 
-    // Link tag to video
     await pool.execute(
       'INSERT IGNORE INTO video_tags (video_id, tag_id) VALUES (?, ?)',
       [req.params.id, tag.id]
@@ -161,9 +221,19 @@ router.post('/:id/tags', async (req, res) => {
   }
 });
 
-// Remove tag from video (AJAX)
+// Remove tag from video (AJAX - requires write permission)
 router.delete('/:id/tags/:tagId', async (req, res) => {
   try {
+    const [videoRows] = await pool.execute(
+      'SELECT library_id FROM videos WHERE id = ?', [req.params.id]
+    );
+    if (videoRows.length === 0) return res.status(404).json({ error: 'not found' });
+
+    const access = await getLibraryAccess(req.session.user.id, videoRows[0].library_id, req.session.user.role);
+    if (!access.allowed || !canWrite(access.permission)) {
+      return res.status(403).json({ error: 'permission denied' });
+    }
+
     await pool.execute(
       'DELETE FROM video_tags WHERE video_id = ? AND tag_id = ?',
       [req.params.id, req.params.tagId]
@@ -175,7 +245,7 @@ router.delete('/:id/tags/:tagId', async (req, res) => {
   }
 });
 
-// Get user's tags (for autocomplete)
+// Get user's tags (for autocomplete - user-scoped)
 router.get('/api/tags', async (req, res) => {
   try {
     const [tags] = await pool.execute(
@@ -188,21 +258,24 @@ router.get('/api/tags', async (req, res) => {
   }
 });
 
-// Search videos
+// Search videos (across all accessible libraries)
 router.get('/', async (req, res) => {
   const q = (req.query.q || '').trim();
   if (!q) return res.redirect('/dashboard');
 
   try {
-    const [videos] = await pool.execute(
+    const libIds = await getAccessibleLibraryIds(req.session.user.id, req.session.user.role);
+    if (libIds.length === 0) return res.render('search', { pageTitle: 'Recherche', query: q, videos: [] });
+
+    const [videos] = await pool.query(
       `SELECT v.*, l.name as library_name, t.filename as thumb
        FROM videos v
        JOIN libraries l ON l.id = v.library_id
        LEFT JOIN thumbnails t ON t.video_id = v.id
-       WHERE l.user_id = ? AND (v.title LIKE ? OR v.filename LIKE ?)
+       WHERE l.id IN (?) AND (v.title LIKE ? OR v.filename LIKE ?)
        ORDER BY v.title ASC
        LIMIT 100`,
-      [req.session.user.id, `%${q}%`, `%${q}%`]
+      [libIds, `%${q}%`, `%${q}%`]
     );
     res.render('search', { pageTitle: 'Recherche', query: q, videos });
   } catch (err) {
@@ -215,15 +288,18 @@ router.get('/', async (req, res) => {
 router.get('/:id/stream', async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      `SELECT v.*, l.path as library_path, l.user_id
+      `SELECT v.*, l.path as library_path
        FROM videos v
        JOIN libraries l ON l.id = v.library_id
-       WHERE v.id = ? AND l.user_id = ?`,
-      [req.params.id, req.session.user.id]
+       WHERE v.id = ?`,
+      [req.params.id]
     );
     if (rows.length === 0) return res.status(404).send('Video not found');
 
     const video = rows[0];
+    const access = await getLibraryAccess(req.session.user.id, video.library_id, req.session.user.role);
+    if (!access.allowed) return res.status(404).send('Video not found');
+
     const filePath = path.join(video.library_path, video.filepath);
 
     if (!fs.existsSync(filePath)) {
@@ -264,18 +340,8 @@ router.get('/:id/stream', async (req, res) => {
 // Video player page
 router.get('/:id', async (req, res) => {
   try {
-    const [rows] = await pool.execute(
-      `SELECT v.*, l.path as library_path, l.name as library_name, l.user_id,
-              t.filename as thumb_filename
-       FROM videos v
-       JOIN libraries l ON l.id = v.library_id
-       LEFT JOIN thumbnails t ON t.video_id = v.id
-       WHERE v.id = ? AND l.user_id = ?`,
-      [req.params.id, req.session.user.id]
-    );
-    if (rows.length === 0) return res.redirect('/dashboard');
-
-    const video = rows[0];
+    const { video, access } = await getVideoWithAccess(req.params.id, req.session.user.id, req.session.user.role);
+    if (!video || !access.allowed) return res.redirect('/dashboard');
 
     // Get saved progress
     const [progressRows] = await pool.execute(
@@ -291,12 +357,16 @@ router.get('/:id', async (req, res) => {
     );
     const isFavorite = favRows.length > 0;
 
-    // Record in watch history
+    // Record in watch history + increment view count
     await pool.execute(
       `INSERT INTO watch_history (user_id, video_id, progress)
        VALUES (?, ?, ?)
        ON DUPLICATE KEY UPDATE watched_at = CURRENT_TIMESTAMP`,
       [req.session.user.id, video.id, savedProgress]
+    );
+    await pool.execute(
+      'UPDATE videos SET view_count = COALESCE(view_count, 0) + 1 WHERE id = ?',
+      [video.id]
     );
 
     // Get tags for this video
@@ -308,13 +378,13 @@ router.get('/:id', async (req, res) => {
       [video.id]
     );
 
-    // Get user's playlists (for "add to playlist" menu)
+    // Get user's playlists
     const [userPlaylists] = await pool.execute(
       'SELECT id, name FROM playlists WHERE user_id = ? ORDER BY name',
       [req.session.user.id]
     );
 
-    // Fetch random similar videos from same library
+    // Similar videos from same library
     const [simRows] = await pool.execute(
       `SELECT v.id, v.filename, v.title, v.size, t.filename as thumb
        FROM videos v
@@ -325,7 +395,7 @@ router.get('/:id', async (req, res) => {
       [video.library_id, video.id]
     );
 
-    // Build breadcrumb parts
+    // Breadcrumb
     const breadcrumb = [];
     if (video.filepath.includes('/')) {
       const parts = path.dirname(video.filepath).split('/');
@@ -345,6 +415,7 @@ router.get('/:id', async (req, res) => {
       breadcrumb,
       tags: tagRows,
       playlists: userPlaylists,
+      permission: access.permission,
     });
   } catch (err) {
     console.error('Video view error:', err);

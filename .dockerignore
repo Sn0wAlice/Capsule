@@ -1,8 +1,12 @@
 node_modules
 .git
+.github
 .idea
 media
 mysql_data
 .env
 .env.*
 !.env.example
+docker-compose*.yml
+README.md
+LICENSE

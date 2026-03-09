@@ -21,7 +21,7 @@ router.post('/login', async (req, res) => {
     if (!match) {
       return res.render('login', { error: 'Identifiants invalides', registerEnabled: !isRegisterDisabled() });
     }
-    req.session.user = { id: user.id, username: user.username };
+    req.session.user = { id: user.id, username: user.username, role: user.role || 'user', theme: user.theme || 'dark', default_view: user.default_view || 'grid' };
     res.redirect('/dashboard');
   } catch (err) {
     console.error('Login error:', err);
@@ -53,9 +53,12 @@ router.post('/register', async (req, res) => {
   }
   try {
     const hash = await bcrypt.hash(password, 10);
-    await pool.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)', [username, hash]);
-    const [rows] = await pool.execute('SELECT id, username FROM users WHERE username = ?', [username]);
-    req.session.user = { id: rows[0].id, username: rows[0].username };
+    // First registered user becomes admin
+    const [countRows] = await pool.execute('SELECT COUNT(*) as cnt FROM users');
+    const role = countRows[0].cnt === 0 ? 'admin' : 'user';
+    await pool.execute('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)', [username, hash, role]);
+    const [rows] = await pool.execute('SELECT id, username, role, theme, default_view FROM users WHERE username = ?', [username]);
+    req.session.user = { id: rows[0].id, username: rows[0].username, role: rows[0].role, theme: rows[0].theme || 'dark', default_view: rows[0].default_view || 'grid' };
     res.redirect('/dashboard');
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') {

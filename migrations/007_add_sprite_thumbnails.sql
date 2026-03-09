@@ -1,0 +1,1 @@
+ALTER TABLE thumbnails ADD COLUMN sprite_filename VARCHAR(255) DEFAULT NULL

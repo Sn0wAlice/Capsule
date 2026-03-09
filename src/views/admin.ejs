@@ -1,0 +1,65 @@
+<%- include('partials/header') %>
+
+<div class="page-header">
+  <h1>Administration</h1>
+</div>
+
+<% if (success) { %>
+  <div class="alert alert-success"><%= success %></div>
+<% } %>
+<% if (error) { %>
+  <div class="alert alert-error"><%= error %></div>
+<% } %>
+
+<div class="card">
+  <h2>Utilisateurs (<%= users.length %>)</h2>
+  <table class="video-table">
+    <thead>
+      <tr>
+        <th>Nom d'utilisateur</th>
+        <th>Rôle</th>
+        <th>Bibliothèques</th>
+        <th>Inscrit le</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% for (const u of users) { %>
+        <tr>
+          <td><%= u.username %></td>
+          <td>
+            <% if (u.id !== user.id) { %>
+              <form method="POST" action="/admin/users/<%= u.id %>/role" style="display:inline">
+                <select name="role" onchange="this.form.submit()" class="autoplay-select">
+                  <option value="user" <%= u.role === 'user' ? 'selected' : '' %>>Utilisateur</option>
+                  <option value="admin" <%= u.role === 'admin' ? 'selected' : '' %>>Admin</option>
+                </select>
+              </form>
+            <% } else { %>
+              <span class="badge badge-accent">Admin (vous)</span>
+            <% } %>
+          </td>
+          <td><%= u.library_count %></td>
+          <td><%= new Date(u.created_at).toLocaleDateString('fr-FR') %></td>
+          <td>
+            <% if (u.id !== user.id) { %>
+              <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+                <button type="button" class="btn btn-sm" onclick="this.nextElementSibling.style.display='flex'">Mot de passe</button>
+                <form method="POST" action="/admin/users/<%= u.id %>/password" style="display:none;gap:0.5rem;align-items:center">
+                  <input type="password" name="password" placeholder="Nouveau mot de passe" required style="width:150px;padding:0.3rem 0.5rem;background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:0.8rem">
+                  <button type="submit" class="btn btn-sm btn-primary">OK</button>
+                </form>
+                <form method="POST" action="/admin/users/<%= u.id %>/delete" style="display:inline"
+                      onsubmit="return confirm('Supprimer le compte de <%= u.username %> ? Toutes ses données seront effacées.')">
+                  <button type="submit" class="btn btn-sm btn-danger">Supprimer</button>
+                </form>
+              </div>
+            <% } %>
+          </td>
+        </tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<%- include('partials/footer') %>

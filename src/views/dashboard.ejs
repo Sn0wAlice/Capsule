@@ -77,32 +77,157 @@ function formatSize(bytes) {
   </form>
 </div>
 
-<% if (libraries.length === 0) { %>
+<!-- My libraries -->
+<% if (libraries.length === 0 && sharedLibraries.length === 0) { %>
   <div class="empty-state">
     <p>Aucune bibliothèque. Ajoutez-en une pour commencer.</p>
   </div>
-<% } else { %>
-  <div class="libraries-grid">
-    <% for (const lib of libraries) { %>
-      <div class="card library-card">
-        <div class="library-info">
-          <h3><a href="/libraries/<%= lib.id %>"><%= lib.name %></a></h3>
-          <p class="library-path"><%= lib.path %></p>
-          <p class="library-count"><%= lib.video_count || 0 %> vidéo(s)</p>
+<% } %>
+
+<% if (libraries.length > 0) { %>
+  <div class="dashboard-section">
+    <h2 class="section-title">Mes bibliothèques</h2>
+    <div class="libraries-grid">
+      <% for (const lib of libraries) { %>
+        <div class="card library-card">
+          <div class="library-info">
+            <h3><a href="/libraries/<%= lib.id %>"><%= lib.name %></a></h3>
+            <p class="library-path"><%= lib.path %></p>
+            <p class="library-count"><%= lib.video_count || 0 %> vidéo(s)</p>
+          </div>
+          <div class="library-actions">
+            <a href="/libraries/<%= lib.id %>" class="btn btn-sm">Parcourir</a>
+            <form method="POST" action="/libraries/<%= lib.id %>/scan" style="display:inline">
+              <button type="submit" class="btn btn-sm btn-primary">Scanner</button>
+            </form>
+            <button type="button" class="btn btn-sm" onclick="openShareModal(<%= lib.id %>, '<%= lib.name.replace(/'/g, "\\'") %>')">Partager</button>
+            <form method="POST" action="/libraries/<%= lib.id %>/delete" style="display:inline"
+                  onsubmit="return confirm('Supprimer cette bibliothèque ?')">
+              <button type="submit" class="btn btn-sm btn-danger">Supprimer</button>
+            </form>
+          </div>
         </div>
-        <div class="library-actions">
-          <a href="/libraries/<%= lib.id %>" class="btn btn-sm">Parcourir</a>
-          <form method="POST" action="/libraries/<%= lib.id %>/scan" style="display:inline">
-            <button type="submit" class="btn btn-sm btn-primary">Scanner</button>
-          </form>
-          <form method="POST" action="/libraries/<%= lib.id %>/delete" style="display:inline"
-                onsubmit="return confirm('Supprimer cette bibliothèque ?')">
-            <button type="submit" class="btn btn-sm btn-danger">Supprimer</button>
-          </form>
-        </div>
-      </div>
-    <% } %>
+      <% } %>
+    </div>
   </div>
 <% } %>
+
+<!-- Shared with me -->
+<% if (sharedLibraries.length > 0) { %>
+  <div class="dashboard-section">
+    <h2 class="section-title">Partagées avec moi</h2>
+    <div class="libraries-grid">
+      <% for (const lib of sharedLibraries) { %>
+        <div class="card library-card">
+          <div class="library-info">
+            <h3><a href="/libraries/<%= lib.id %>"><%= lib.name %></a></h3>
+            <p class="library-path"><%= lib.owner_name %> &mdash; <span class="badge <%= lib.permission === 'write' ? 'badge-success' : 'badge-info' %>"><%= lib.permission === 'write' ? 'Lecture/Écriture' : 'Lecture' %></span></p>
+            <p class="library-count"><%= lib.video_count || 0 %> vidéo(s)</p>
+          </div>
+          <div class="library-actions">
+            <a href="/libraries/<%= lib.id %>" class="btn btn-sm">Parcourir</a>
+            <% if (lib.permission === 'write') { %>
+              <form method="POST" action="/libraries/<%= lib.id %>/scan" style="display:inline">
+                <button type="submit" class="btn btn-sm btn-primary">Scanner</button>
+              </form>
+            <% } %>
+          </div>
+        </div>
+      <% } %>
+    </div>
+  </div>
+<% } %>
+
+<!-- Share Modal -->
+<div class="modal-overlay" id="share-modal" style="display:none">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>Partager : <span id="share-lib-name"></span></h2>
+      <button class="modal-close" onclick="closeShareModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="share-list"></div>
+      <div class="share-add-form">
+        <select id="share-user-select">
+          <option value="">Choisir un utilisateur...</option>
+        </select>
+        <select id="share-perm-select">
+          <option value="read">Lecture</option>
+          <option value="write">Lecture/Écriture</option>
+        </select>
+        <button class="btn btn-primary btn-sm" id="share-add-btn">Ajouter</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentShareLibId = null;
+
+function openShareModal(libId, libName) {
+  currentShareLibId = libId;
+  document.getElementById('share-lib-name').textContent = libName;
+  document.getElementById('share-modal').style.display = 'flex';
+  loadShares(libId);
+}
+
+function closeShareModal() {
+  document.getElementById('share-modal').style.display = 'none';
+  currentShareLibId = null;
+}
+
+function loadShares(libId) {
+  fetch('/libraries/' + libId + '/shares')
+    .then(r => r.json())
+    .then(data => {
+      const list = document.getElementById('share-list');
+      list.innerHTML = '';
+      for (const s of data.shares) {
+        const div = document.createElement('div');
+        div.className = 'share-row';
+        div.innerHTML =
+          '<span class="share-username">' + s.username + '</span>' +
+          '<span class="badge ' + (s.permission === 'write' ? 'badge-success' : 'badge-info') + '">' +
+            (s.permission === 'write' ? 'Lecture/Écriture' : 'Lecture') +
+          '</span>' +
+          '<button class="btn btn-sm btn-danger" onclick="removeShare(' + libId + ',' + s.id + ')">Retirer</button>';
+        list.appendChild(div);
+      }
+      if (data.shares.length === 0) {
+        list.innerHTML = '<p class="text-muted">Aucun partage</p>';
+      }
+
+      const sharedUserIds = new Set(data.shares.map(s => s.user_id));
+      const select = document.getElementById('share-user-select');
+      select.innerHTML = '<option value="">Choisir un utilisateur...</option>';
+      for (const u of data.users) {
+        if (!sharedUserIds.has(u.id)) {
+          select.innerHTML += '<option value="' + u.id + '">' + u.username + '</option>';
+        }
+      }
+    });
+}
+
+document.getElementById('share-add-btn').addEventListener('click', () => {
+  const userId = document.getElementById('share-user-select').value;
+  const perm = document.getElementById('share-perm-select').value;
+  if (!userId || !currentShareLibId) return;
+  fetch('/libraries/' + currentShareLibId + '/shares', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId, permission: perm }),
+  }).then(r => r.json()).then(() => loadShares(currentShareLibId));
+});
+
+function removeShare(libId, shareId) {
+  fetch('/libraries/' + libId + '/shares/' + shareId + '/delete', { method: 'POST' })
+    .then(r => r.json())
+    .then(() => loadShares(libId));
+}
+
+document.getElementById('share-modal').addEventListener('click', (e) => {
+  if (e.target.id === 'share-modal') closeShareModal();
+});
+</script>
 
 <%- include('partials/footer') %>

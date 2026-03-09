@@ -1,8 +1,9 @@
 const express = require('express');
 const fs = require('fs');
 const pool = require('../config/database');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, getLibraryAccess, canWrite } = require('../middleware/auth');
 const { scanLibrary } = require('../services/scanner');
+const { watchLibrary, unwatchLibrary } = require('../services/watcher');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -13,7 +14,6 @@ router.get('/', async (req, res) => {
 });
 
 router.get('/dashboard', async (req, res) => {
-  // Mounted on /libraries, but we also add /dashboard at app level
   res.redirect('/dashboard');
 });
 
@@ -24,16 +24,16 @@ router.post('/add', async (req, res) => {
     return res.redirect('/dashboard?error=Nom et chemin requis');
   }
 
-  // Check path exists
   if (!fs.existsSync(libPath)) {
     return res.redirect('/dashboard?error=Le chemin n\'existe pas');
   }
 
   try {
-    await pool.execute(
+    const [result] = await pool.execute(
       'INSERT INTO libraries (name, path, user_id) VALUES (?, ?, ?)',
       [name, libPath, req.session.user.id]
     );
+    watchLibrary(result.insertId, libPath);
     res.redirect('/dashboard');
   } catch (err) {
     console.error('Add library error:', err);
@@ -41,10 +41,15 @@ router.post('/add', async (req, res) => {
   }
 });
 
-// Delete library
+// Delete library (owner or admin only)
 router.post('/:id/delete', async (req, res) => {
   try {
-    await pool.execute('DELETE FROM libraries WHERE id = ? AND user_id = ?', [req.params.id, req.session.user.id]);
+    const access = await getLibraryAccess(req.session.user.id, req.params.id, req.session.user.role);
+    if (access.permission !== 'owner' && access.permission !== 'admin') {
+      return res.redirect('/dashboard?error=Accès refusé');
+    }
+    unwatchLibrary(parseInt(req.params.id));
+    await pool.execute('DELETE FROM libraries WHERE id = ?', [req.params.id]);
     res.redirect('/dashboard');
   } catch (err) {
     console.error('Delete library error:', err);
@@ -52,9 +57,13 @@ router.post('/:id/delete', async (req, res) => {
   }
 });
 
-// Scan library
+// Scan library (owner, admin, or write)
 router.post('/:id/scan', async (req, res) => {
   try {
+    const access = await getLibraryAccess(req.session.user.id, req.params.id, req.session.user.role);
+    if (!access.allowed || !canWrite(access.permission)) {
+      return res.redirect('/dashboard?error=Accès refusé');
+    }
     const result = await scanLibrary(parseInt(req.params.id));
     res.redirect(`/libraries/${req.params.id}?scanned=${result.total}`);
   } catch (err) {
@@ -74,15 +83,14 @@ router.get('/:id/videos', async (req, res) => {
   const offset = (page - 1) * PAGE_SIZE;
 
   try {
-    const [libs] = await pool.execute(
-      'SELECT id FROM libraries WHERE id = ? AND user_id = ?',
-      [libraryId, req.session.user.id]
-    );
-    if (libs.length === 0) return res.json({ videos: [], hasMore: false });
+    const access = await getLibraryAccess(req.session.user.id, libraryId, req.session.user.role);
+    if (!access.allowed) return res.json({ videos: [], hasMore: false });
 
     const orderCol = sort === 'date' ? 'v.updated_at' : sort === 'size' ? 'v.size' : 'v.filename';
     const [rows] = await pool.execute(
-      `SELECT v.id, v.filename, v.title, v.size, t.filename as thumb
+      `SELECT v.id, v.filename, v.title, v.size, v.duration, v.view_count,
+              v.updated_at, v.created_at, t.filename as thumb,
+              t.sprite_filename as sprite
        FROM videos v LEFT JOIN thumbnails t ON t.video_id = v.id
        WHERE v.library_id = ?
        ORDER BY ${orderCol} ${order === 'desc' ? 'DESC' : 'ASC'}
@@ -99,19 +107,97 @@ router.get('/:id/videos', async (req, res) => {
   }
 });
 
+// === Library sharing routes ===
+
+// Get shares for a library (AJAX)
+router.get('/:id/shares', async (req, res) => {
+  try {
+    const access = await getLibraryAccess(req.session.user.id, req.params.id, req.session.user.role);
+    if (access.permission !== 'owner' && access.permission !== 'admin') {
+      return res.status(403).json({ error: 'Accès refusé' });
+    }
+
+    const [shares] = await pool.execute(
+      `SELECT ls.id, ls.permission, u.id as user_id, u.username
+       FROM library_shares ls
+       JOIN users u ON u.id = ls.user_id
+       WHERE ls.library_id = ?
+       ORDER BY u.username`,
+      [req.params.id]
+    );
+
+    const [lib] = await pool.execute('SELECT user_id FROM libraries WHERE id = ?', [req.params.id]);
+    const ownerId = lib[0].user_id;
+    const [allUsers] = await pool.execute(
+      'SELECT id, username FROM users WHERE id != ? ORDER BY username',
+      [ownerId]
+    );
+
+    res.json({ shares, users: allUsers });
+  } catch (err) {
+    console.error('Get shares error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Add/update share (AJAX)
+router.post('/:id/shares', async (req, res) => {
+  try {
+    const access = await getLibraryAccess(req.session.user.id, req.params.id, req.session.user.role);
+    if (access.permission !== 'owner' && access.permission !== 'admin') {
+      return res.status(403).json({ error: 'Accès refusé' });
+    }
+
+    const { user_id, permission } = req.body;
+    const perm = permission === 'write' ? 'write' : 'read';
+
+    const [lib] = await pool.execute('SELECT user_id FROM libraries WHERE id = ?', [req.params.id]);
+    if (parseInt(user_id) === lib[0].user_id) {
+      return res.status(400).json({ error: 'Le propriétaire a déjà accès' });
+    }
+
+    await pool.execute(
+      `INSERT INTO library_shares (library_id, user_id, permission)
+       VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE permission = ?`,
+      [req.params.id, user_id, perm, perm]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Add share error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Remove share (AJAX)
+router.post('/:id/shares/:shareId/delete', async (req, res) => {
+  try {
+    const access = await getLibraryAccess(req.session.user.id, req.params.id, req.session.user.role);
+    if (access.permission !== 'owner' && access.permission !== 'admin') {
+      return res.status(403).json({ error: 'Accès refusé' });
+    }
+    await pool.execute('DELETE FROM library_shares WHERE id = ? AND library_id = ?', [req.params.shareId, req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Remove share error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 // View library contents
 router.get('/:id', async (req, res) => {
   const libraryId = req.params.id;
-  const viewMode = req.query.view || 'folder'; // 'folder' or 'flat'
-  const sort = req.query.sort || 'name';        // 'name', 'date', 'size'
+  const viewMode = req.query.view || 'folder';
+  const sort = req.query.sort || 'name';
   const order = req.query.order || 'asc';
   const currentPath = req.query.path || '';
+  const listMode = req.query.display || req.session.user.default_view || 'grid';
 
   try {
-    const [libs] = await pool.execute(
-      'SELECT * FROM libraries WHERE id = ? AND user_id = ?',
-      [libraryId, req.session.user.id]
-    );
+    const access = await getLibraryAccess(req.session.user.id, libraryId, req.session.user.role);
+    if (!access.allowed) return res.redirect('/dashboard');
+
+    const [libs] = await pool.execute('SELECT * FROM libraries WHERE id = ?', [libraryId]);
     if (libs.length === 0) return res.redirect('/dashboard');
     const library = libs[0];
 
@@ -119,23 +205,20 @@ router.get('/:id', async (req, res) => {
     let hasMore = false;
 
     if (viewMode === 'flat') {
-      // Paginated flat list
       const orderCol = sort === 'date' ? 'v.updated_at' : sort === 'size' ? 'v.size' : 'v.filename';
       const [rows] = await pool.execute(
-        `SELECT v.*, t.filename as thumb FROM videos v LEFT JOIN thumbnails t ON t.video_id = v.id WHERE v.library_id = ? ORDER BY ${orderCol} ${order === 'desc' ? 'DESC' : 'ASC'} LIMIT ?`,
+        `SELECT v.*, t.filename as thumb, t.sprite_filename as sprite FROM videos v LEFT JOIN thumbnails t ON t.video_id = v.id WHERE v.library_id = ? ORDER BY ${orderCol} ${order === 'desc' ? 'DESC' : 'ASC'} LIMIT ?`,
         [libraryId, PAGE_SIZE + 1]
       );
       hasMore = rows.length > PAGE_SIZE;
       if (hasMore) rows.pop();
       videos = rows;
     } else {
-      // Folder view: get videos in current path level
       const [rows] = await pool.execute(
-        'SELECT v.*, t.filename as thumb FROM videos v LEFT JOIN thumbnails t ON t.video_id = v.id WHERE v.library_id = ?',
+        'SELECT v.*, t.filename as thumb, t.sprite_filename as sprite FROM videos v LEFT JOIN thumbnails t ON t.video_id = v.id WHERE v.library_id = ?',
         [libraryId]
       );
 
-      // Build folder structure for current path
       const folders = new Set();
       const filesInPath = [];
 
@@ -172,6 +255,8 @@ router.get('/:id', async (req, res) => {
       order,
       currentPath,
       hasMore,
+      listMode,
+      permission: access.permission,
       folders: res.locals.folders || [],
       scanned: req.query.scanned || null,
       error: req.query.error || null,

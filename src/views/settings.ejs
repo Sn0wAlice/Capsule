@@ -1,0 +1,98 @@
+<%- include('partials/header') %>
+
+<div class="page-header">
+  <h1>Paramètres</h1>
+</div>
+
+<% if (success) { %>
+  <div class="alert alert-success"><%= success %></div>
+<% } %>
+<% if (error) { %>
+  <div class="alert alert-error"><%= error %></div>
+<% } %>
+
+<div class="settings-grid">
+  <!-- Appearance -->
+  <div class="card">
+    <h2>Apparence</h2>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">Thème</span>
+        <span class="setting-desc">Choisir entre le thème clair et sombre</span>
+      </div>
+      <div class="setting-control">
+        <button class="btn btn-sm" id="setting-theme-toggle">
+          <span id="setting-theme-label"><%= user.theme === 'light' ? 'Clair' : 'Sombre' %></span>
+        </button>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">Vue par défaut</span>
+        <span class="setting-desc">Affichage des vidéos dans les bibliothèques</span>
+      </div>
+      <div class="setting-control">
+        <select id="setting-default-view" class="autoplay-select">
+          <option value="grid" <%= user.default_view === 'grid' ? 'selected' : '' %>>Grille</option>
+          <option value="list" <%= user.default_view === 'list' ? 'selected' : '' %>>Liste</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Account -->
+  <div class="card">
+    <h2>Compte</h2>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">Nom d'utilisateur</span>
+        <span class="setting-desc"><%= user.username %></span>
+      </div>
+    </div>
+    <form method="POST" action="/settings/password">
+      <div class="setting-row" style="flex-direction: column; align-items: stretch; gap: 0.75rem;">
+        <span class="setting-label">Changer le mot de passe</span>
+        <div class="form-group">
+          <input type="password" name="current" placeholder="Mot de passe actuel" required>
+        </div>
+        <div class="form-group">
+          <input type="password" name="password" placeholder="Nouveau mot de passe" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 0">
+          <input type="password" name="confirm" placeholder="Confirmer" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Modifier</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  // Theme toggle on settings page
+  document.getElementById('setting-theme-toggle').addEventListener('click', () => {
+    const html = document.documentElement;
+    const current = html.getAttribute('data-theme');
+    const next = current === 'light' ? 'dark' : 'light';
+    html.setAttribute('data-theme', next);
+    document.getElementById('setting-theme-label').textContent = next === 'light' ? 'Clair' : 'Sombre';
+    // Also update header dropdown label if exists
+    const headerLabel = document.getElementById('theme-label');
+    if (headerLabel) headerLabel.textContent = next === 'light' ? 'Thème sombre' : 'Thème clair';
+    fetch('/settings/theme', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ theme: next }),
+    });
+  });
+
+  // Default view
+  document.getElementById('setting-default-view').addEventListener('change', (e) => {
+    fetch('/settings/default-view', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ view: e.target.value }),
+    });
+  });
+</script>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,4 @@
+ALTER TABLE users ADD COLUMN theme VARCHAR(10) DEFAULT 'dark';
+ALTER TABLE users ADD COLUMN default_view VARCHAR(10) DEFAULT 'grid';
+
+ALTER TABLE videos ADD COLUMN view_count INT DEFAULT 0

@@ -9,6 +9,19 @@ function formatSize(bytes) {
   while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
   return size.toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
 }
+function formatDuration(seconds) {
+  if (!seconds) return '—';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return h + 'h ' + String(m).padStart(2, '0') + 'm ' + String(s).padStart(2, '0') + 's';
+  return m + 'm ' + String(s).padStart(2, '0') + 's';
+}
+function formatBitrate(bps) {
+  if (!bps) return '—';
+  if (bps >= 1000000) return (bps / 1000000).toFixed(1) + ' Mbps';
+  return (bps / 1000).toFixed(0) + ' kbps';
+}
 %>
 
 <div class="player-page">
@@ -32,7 +45,7 @@ function formatSize(bytes) {
         <div id="artplayer-app"></div>
       </div>
       <div class="player-title-bar">
-        <h1 class="player-title" id="video-title" title="Double-cliquer pour renommer"><%= video.title || video.filename %></h1>
+        <h1 class="player-title" id="video-title"<% if (['owner','admin','write'].includes(permission)) { %> title="Double-cliquer pour renommer"<% } %>><%= video.title || video.filename %></h1>
         <div class="player-actions">
           <button class="btn btn-sm btn-fav<%= isFavorite ? ' active' : '' %>" id="btn-fav" title="Favoris (F)">
             <span id="fav-icon"><%= isFavorite ? '&#9733;' : '&#9734;' %></span>
@@ -62,13 +75,17 @@ function formatSize(bytes) {
           <% for (const tag of tags) { %>
             <span class="tag tag-<%= tag.color %>" data-id="<%= tag.id %>">
               <%= tag.name %>
-              <button class="tag-remove" data-id="<%= tag.id %>">&times;</button>
+              <% if (['owner','admin','write'].includes(permission)) { %>
+                <button class="tag-remove" data-id="<%= tag.id %>">&times;</button>
+              <% } %>
             </span>
           <% } %>
         </div>
+        <% if (['owner','admin','write'].includes(permission)) { %>
         <form class="tag-add-form" id="tag-form">
           <input type="text" id="tag-input" placeholder="+ tag" autocomplete="off">
         </form>
+        <% } %>
       </div>
     </div>
 
@@ -88,22 +105,46 @@ function formatSize(bytes) {
           <span class="info-label">Bibliothèque</span>
           <span class="info-value"><%= video.library_name %></span>
         </div>
+        <% if (video.duration) { %>
+        <div class="info-row">
+          <span class="info-label">Durée</span>
+          <span class="info-value"><%= formatDuration(video.duration) %></span>
+        </div>
+        <% } %>
         <% if (video.size) { %>
         <div class="info-row">
           <span class="info-label">Taille</span>
           <span class="info-value"><%= formatSize(video.size) %></span>
         </div>
         <% } %>
+        <% if (video.width && video.height) { %>
+        <div class="info-row">
+          <span class="info-label">Résolution</span>
+          <span class="info-value"><%= video.width %>×<%= video.height %></span>
+        </div>
+        <% } %>
+        <% if (video.codec) { %>
+        <div class="info-row">
+          <span class="info-label">Codec vidéo</span>
+          <span class="info-value mono"><%= video.codec %></span>
+        </div>
+        <% } %>
+        <% if (video.audio_codec) { %>
+        <div class="info-row">
+          <span class="info-label">Codec audio</span>
+          <span class="info-value mono"><%= video.audio_codec %></span>
+        </div>
+        <% } %>
+        <% if (video.bitrate) { %>
+        <div class="info-row">
+          <span class="info-label">Débit</span>
+          <span class="info-value"><%= formatBitrate(video.bitrate) %></span>
+        </div>
+        <% } %>
         <% if (video.mime_type) { %>
         <div class="info-row">
           <span class="info-label">Type</span>
           <span class="info-value mono"><%= video.mime_type %></span>
-        </div>
-        <% } %>
-        <% if (video.thumb_filename) { %>
-        <div class="info-row">
-          <span class="info-label">Thumbnail</span>
-          <span class="info-value mono"><%= video.thumb_filename %></span>
         </div>
         <% } %>
         <div class="info-row">
@@ -117,7 +158,9 @@ function formatSize(bytes) {
         <div class="shortcut-row"><kbd>F</kbd> <span>Favoris</span></div>
         <div class="shortcut-row"><kbd>N</kbd> <span>Vidéo suivante</span></div>
         <div class="shortcut-row"><kbd>M</kbd> <span>Mode auto-play</span></div>
+        <% if (['owner','admin','write'].includes(permission)) { %>
         <div class="shortcut-row"><kbd>T</kbd> <span>Ajouter un tag</span></div>
+        <% } %>
       </div>
     </div>
   </div>
@@ -150,6 +193,7 @@ function formatSize(bytes) {
 <script>
   const VIDEO_ID = <%= video.id %>;
   const SAVED_PROGRESS = <%= savedProgress %>;
+  const CAN_WRITE = <%= ['owner','admin','write'].includes(permission) %>;
 
   // Restore autoplay mode from localStorage
   const autoplaySelect = document.getElementById('autoplay-mode');
@@ -165,7 +209,7 @@ function formatSize(bytes) {
     url: '/videos/' + VIDEO_ID + '/stream',
     type: '<%= video.mime_type === "video/x-matroska" ? "mkv" : "" %>',
     volume: 0.7,
-    autoSize: true,
+    autoSize: false,
     autoMini: true,
     loop: false,
     flip: true,
@@ -180,6 +224,28 @@ function formatSize(bytes) {
     miniProgressBar: true,
     playsInline: true,
     theme: '#8b5cf6',
+    controls: [
+      {
+        position: 'right',
+        html: '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 5v14l-11-7z"/><rect x="18" y="5" width="2" height="14" rx="1"/></svg>',
+        tooltip: 'Vidéo suivante (N)',
+        click: function () {
+          goNext();
+        },
+      },
+    ],
+  });
+
+  // Resize container to match video aspect ratio
+  art.on('video:loadedmetadata', () => {
+    const { videoWidth, videoHeight } = art.video;
+    if (videoWidth && videoHeight) {
+      const container = document.getElementById('artplayer-app');
+      const w = container.clientWidth;
+      const h = Math.min(w * videoHeight / videoWidth, window.innerHeight * 0.8);
+      container.style.height = h + 'px';
+      art.autoSize = false;
+    }
   });
 
   // Resume playback
@@ -268,7 +334,7 @@ function formatSize(bytes) {
 
   // Inline rename (double-click title)
   const titleEl = document.getElementById('video-title');
-  titleEl.addEventListener('dblclick', () => {
+  if (CAN_WRITE) titleEl.addEventListener('dblclick', () => {
     const current = titleEl.textContent.trim();
     const input = document.createElement('input');
     input.type = 'text';
@@ -304,7 +370,7 @@ function formatSize(bytes) {
   const tagForm = document.getElementById('tag-form');
   const tagInput = document.getElementById('tag-input');
 
-  tagForm.addEventListener('submit', (e) => {
+  if (CAN_WRITE && tagForm) tagForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const name = tagInput.value.trim();
     if (!name) return;
@@ -324,7 +390,7 @@ function formatSize(bytes) {
     }).catch(() => {});
   });
 
-  tagsList.addEventListener('click', (e) => {
+  if (CAN_WRITE) tagsList.addEventListener('click', (e) => {
     if (e.target.classList.contains('tag-remove')) {
       const tagId = e.target.dataset.id;
       fetch('/videos/' + VIDEO_ID + '/tags/' + tagId, { method: 'DELETE' })
@@ -359,7 +425,7 @@ function formatSize(bytes) {
       case 'f': e.preventDefault(); toggleFav(); break;
       case 'n': e.preventDefault(); goNext(); break;
       case 'm': e.preventDefault(); cycleAutoplay(); break;
-      case 't': e.preventDefault(); tagInput.focus(); break;
+      case 't': if (CAN_WRITE && tagInput) { e.preventDefault(); tagInput.focus(); } break;
     }
   });
 </script>
