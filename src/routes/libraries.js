@@ -87,7 +87,7 @@ router.get('/:id/videos', async (req, res) => {
     if (!access.allowed) return res.json({ videos: [], hasMore: false });
 
     const orderCol = sort === 'date' ? 'v.updated_at' : sort === 'size' ? 'v.size' : 'v.filename';
-    const [rows] = await pool.execute(
+    const [rows] = await pool.query(
       `SELECT v.id, v.filename, v.title, v.size, v.duration, v.view_count,
               v.updated_at, v.created_at, t.filename as thumb,
               t.sprite_filename as sprite
@@ -206,7 +206,7 @@ router.get('/:id', async (req, res) => {
 
     if (viewMode === 'flat') {
       const orderCol = sort === 'date' ? 'v.updated_at' : sort === 'size' ? 'v.size' : 'v.filename';
-      const [rows] = await pool.execute(
+      const [rows] = await pool.query(
         `SELECT v.*, t.filename as thumb, t.sprite_filename as sprite FROM videos v LEFT JOIN thumbnails t ON t.video_id = v.id WHERE v.library_id = ? ORDER BY ${orderCol} ${order === 'desc' ? 'DESC' : 'ASC'} LIMIT ?`,
         [libraryId, PAGE_SIZE + 1]
       );

@@ -66,7 +66,7 @@ function generateThumbnail(videoPath, libraryPath) {
   const thumbPath = path.join(thumbDir, thumbName);
   try {
     execFileSync('ffmpeg', [
-      '-ss', '3', '-i', videoPath,
+      '-ss', '15', '-i', videoPath,
       '-vframes', '1', '-vf', 'scale=320:-2',
       '-q:v', '8', '-y', thumbPath,
     ], { timeout: 15000, stdio: 'pipe' });
