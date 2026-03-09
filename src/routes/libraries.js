@@ -1,5 +1,6 @@
 const express = require('express');
 const fs = require('fs');
+const path = require('path');
 const pool = require('../config/database');
 const { requireAuth, getLibraryAccess, canWrite } = require('../middleware/auth');
 const { scanLibrary } = require('../services/scanner');
@@ -181,6 +182,70 @@ router.post('/:id/shares/:shareId/delete', async (req, res) => {
   } catch (err) {
     console.error('Remove share error:', err);
     res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Reset previews: delete all thumbs/sprites + re-enqueue jobs
+router.post('/:id/reset-previews', async (req, res) => {
+  const libraryId = req.params.id;
+  try {
+    const access = await getLibraryAccess(req.session.user.id, libraryId, req.session.user.role);
+    if (!access.allowed || !canWrite(access.permission)) {
+      return res.redirect('/dashboard?error=Accès refusé');
+    }
+
+    const [lib] = await pool.execute('SELECT path FROM libraries WHERE id = ?', [libraryId]);
+    if (lib.length === 0) return res.redirect('/dashboard');
+    const libraryPath = lib[0].path;
+
+    // Get all thumbnail/sprite files to delete from disk
+    const [thumbs] = await pool.execute(
+      'SELECT t.filename, t.sprite_filename FROM thumbnails t JOIN videos v ON v.id = t.video_id WHERE v.library_id = ?',
+      [libraryId]
+    );
+
+    const capsuleDir = path.join(libraryPath, '.capsule');
+    for (const t of thumbs) {
+      if (t.filename) try { fs.unlinkSync(path.join(capsuleDir, t.filename)); } catch {}
+      if (t.sprite_filename) try { fs.unlinkSync(path.join(capsuleDir, t.sprite_filename)); } catch {}
+    }
+
+    // Delete thumbnail records
+    await pool.execute(
+      'DELETE t FROM thumbnails t JOIN videos v ON v.id = t.video_id WHERE v.library_id = ?',
+      [libraryId]
+    );
+
+    // Reset metadata on videos
+    await pool.execute(
+      'UPDATE videos SET duration = NULL, width = NULL, height = NULL, codec = NULL, audio_codec = NULL, bitrate = NULL WHERE library_id = ?',
+      [libraryId]
+    );
+
+    // Delete existing pending/processing jobs for this library's videos
+    await pool.execute(
+      `DELETE j FROM jobs j JOIN videos v ON v.id = j.video_id WHERE v.library_id = ? AND j.status IN ('pending','processing')`,
+      [libraryId]
+    );
+
+    // Re-enqueue all videos
+    const [videos] = await pool.execute(
+      'SELECT id, filepath FROM videos WHERE library_id = ?',
+      [libraryId]
+    );
+
+    for (const v of videos) {
+      const fullPath = path.join(libraryPath, v.filepath);
+      await pool.execute(
+        'INSERT IGNORE INTO jobs (video_id, library_path, video_path) VALUES (?, ?, ?)',
+        [v.id, libraryPath, fullPath]
+      );
+    }
+
+    res.redirect(`/libraries/${libraryId}?scanned=${videos.length}`);
+  } catch (err) {
+    console.error('Reset previews error:', err);
+    res.redirect(`/libraries/${libraryId}?error=Erreur lors du reset`);
   }
 });
 

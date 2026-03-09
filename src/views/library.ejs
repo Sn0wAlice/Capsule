@@ -36,6 +36,10 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
     <form method="POST" action="/libraries/<%= library.id %>/scan" style="display:inline">
       <button type="submit" class="btn btn-primary">Scanner</button>
     </form>
+    <form method="POST" action="/libraries/<%= library.id %>/reset-previews" style="display:inline"
+          onsubmit="return confirm('Supprimer toutes les previews et relancer le traitement ?')">
+      <button type="submit" class="btn btn-sm" style="color: var(--text-muted);">Regénérer previews</button>
+    </form>
     <% } %>
     <a href="/libraries/<%= library.id %>?view=folder" class="btn btn-sm <%= viewMode === 'folder' ? 'btn-active' : '' %>">Dossiers</a>
     <a href="/libraries/<%= library.id %>?view=flat" class="btn btn-sm <%= viewMode === 'flat' ? 'btn-active' : '' %>">Tout</a>
