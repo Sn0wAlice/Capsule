@@ -1,0 +1,27 @@
+<%- include('partials/header') %>
+
+<div class="auth-page">
+  <div class="auth-card">
+    <h1>Capsule</h1>
+    <p class="auth-subtitle">Connexion</p>
+    <% if (error) { %>
+      <div class="alert alert-error"><%= error %></div>
+    <% } %>
+    <form method="POST" action="/login">
+      <div class="form-group">
+        <label for="username">Nom d'utilisateur</label>
+        <input type="text" id="username" name="username" required autofocus>
+      </div>
+      <div class="form-group">
+        <label for="password">Mot de passe</label>
+        <input type="password" id="password" name="password" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Se connecter</button>
+    </form>
+    <% if (registerEnabled) { %>
+      <p class="auth-link">Pas de compte ? <a href="/register">Créer un compte</a></p>
+    <% } %>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

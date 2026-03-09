@@ -1,0 +1,20 @@
+{
+  "name": "capsule",
+  "version": "1.0.0",
+  "description": "Self-hosted video management app",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node --watch src/app.js"
+  },
+  "dependencies": {
+    "artplayer": "^5.2.1",
+    "bcrypt": "^5.1.1",
+    "dotenv": "^16.4.7",
+    "ejs": "^3.1.10",
+    "express": "^4.21.2",
+    "express-mysql-session": "^3.0.3",
+    "express-session": "^1.18.1",
+    "mysql2": "^3.12.0"
+  }
+}

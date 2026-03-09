@@ -1,0 +1,106 @@
+<%- include('partials/header') %>
+
+<div class="page-header">
+  <div>
+    <h1><%= library.name %></h1>
+    <p class="text-muted"><%= library.path %> &mdash; <%= totalVideos %> vidéo(s)</p>
+  </div>
+  <div class="page-actions">
+    <form method="POST" action="/libraries/<%= library.id %>/scan" style="display:inline">
+      <button type="submit" class="btn btn-primary">Scanner</button>
+    </form>
+    <a href="/libraries/<%= library.id %>?view=folder" class="btn btn-sm <%= viewMode === 'folder' ? 'btn-active' : '' %>">Dossiers</a>
+    <a href="/libraries/<%= library.id %>?view=flat" class="btn btn-sm <%= viewMode === 'flat' ? 'btn-active' : '' %>">Tout</a>
+  </div>
+</div>
+
+<% if (scanned) { %>
+  <div class="alert alert-success">Scan terminé : <%= scanned %> fichier(s) trouvé(s)</div>
+<% } %>
+<% if (error) { %>
+  <div class="alert alert-error"><%= error %></div>
+<% } %>
+
+<% if (viewMode === 'folder') { %>
+  <!-- Breadcrumb -->
+  <div class="breadcrumb">
+    <a href="/libraries/<%= library.id %>?view=folder">Racine</a>
+    <% if (currentPath) {
+      const parts = currentPath.split('/');
+      let accumulated = '';
+      for (let i = 0; i < parts.length; i++) {
+        accumulated += (i > 0 ? '/' : '') + parts[i];
+    %>
+      <span class="separator">/</span>
+      <a href="/libraries/<%= library.id %>?view=folder&path=<%= encodeURIComponent(accumulated) %>"><%= parts[i] %></a>
+    <% }} %>
+  </div>
+
+  <!-- Folders -->
+  <% if (folders.length > 0) { %>
+    <div class="file-list">
+      <% for (const folder of folders) {
+        const folderPath = currentPath ? currentPath + '/' + folder : folder;
+      %>
+        <a href="/libraries/<%= library.id %>?view=folder&path=<%= encodeURIComponent(folderPath) %>" class="file-item folder-item">
+          <span class="file-icon">&#128193;</span>
+          <span class="file-name"><%= folder %></span>
+        </a>
+      <% } %>
+    </div>
+  <% } %>
+<% } %>
+
+<% if (viewMode === 'flat') { %>
+  <!-- Sort controls -->
+  <div class="sort-controls">
+    Trier par :
+    <a href="/libraries/<%= library.id %>?view=flat&sort=name&order=<%= sort === 'name' && order === 'asc' ? 'desc' : 'asc' %>"
+       class="<%= sort === 'name' ? 'active' : '' %>">
+      Nom <%= sort === 'name' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
+    </a>
+    <a href="/libraries/<%= library.id %>?view=flat&sort=date&order=<%= sort === 'date' && order === 'desc' ? 'asc' : 'desc' %>"
+       class="<%= sort === 'date' ? 'active' : '' %>">
+      Date <%= sort === 'date' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
+    </a>
+    <a href="/libraries/<%= library.id %>?view=flat&sort=size&order=<%= sort === 'size' && order === 'desc' ? 'asc' : 'desc' %>"
+       class="<%= sort === 'size' ? 'active' : '' %>">
+      Taille <%= sort === 'size' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
+    </a>
+  </div>
+<% } %>
+
+<!-- Video list -->
+<% if (videos.length > 0) { %>
+  <div class="file-list">
+    <% for (const video of videos) { %>
+      <a href="/videos/<%= video.id %>" class="file-item video-item">
+        <span class="file-icon">&#127909;</span>
+        <div class="file-info">
+          <span class="file-name"><%= video.title || video.filename %></span>
+          <% if (viewMode === 'flat') { %>
+            <span class="file-path"><%= video.filepath %></span>
+          <% } %>
+        </div>
+        <span class="file-size"><%= formatSize(video.size) %></span>
+      </a>
+    <% } %>
+  </div>
+<% } else if (folders.length === 0) { %>
+  <div class="empty-state">
+    <p>Aucune vidéo trouvée. Lancez un scan.</p>
+  </div>
+<% } %>
+
+<%
+function formatSize(bytes) {
+  if (!bytes) return '—';
+  const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
+  let i = 0;
+  let size = bytes;
+  while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
+  return size.toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
+}
+%>
+
+<%- include('partials/footer') %>

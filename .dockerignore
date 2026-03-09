@@ -1,0 +1,8 @@
+node_modules
+.git
+.idea
+media
+mysql_data
+.env
+.env.*
+!.env.example

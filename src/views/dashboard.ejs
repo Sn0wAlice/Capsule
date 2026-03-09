@@ -1,0 +1,52 @@
+<%- include('partials/header') %>
+
+<div class="page-header">
+  <h1>Bibliothèques</h1>
+</div>
+
+<% if (typeof error !== 'undefined' && error) { %>
+  <div class="alert alert-error"><%= error %></div>
+<% } %>
+
+<div class="card">
+  <h2>Ajouter une bibliothèque</h2>
+  <form method="POST" action="/libraries/add" class="form-inline">
+    <div class="form-group">
+      <input type="text" name="name" placeholder="Nom de la bibliothèque" required>
+    </div>
+    <div class="form-group">
+      <input type="text" name="path" placeholder="Chemin du dossier (ex: /media/films)" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Ajouter</button>
+  </form>
+</div>
+
+<% if (libraries.length === 0) { %>
+  <div class="empty-state">
+    <p>Aucune bibliothèque. Ajoutez-en une pour commencer.</p>
+  </div>
+<% } else { %>
+  <div class="libraries-grid">
+    <% for (const lib of libraries) { %>
+      <div class="card library-card">
+        <div class="library-info">
+          <h3><a href="/libraries/<%= lib.id %>"><%= lib.name %></a></h3>
+          <p class="library-path"><%= lib.path %></p>
+          <p class="library-count"><%= lib.video_count || 0 %> vidéo(s)</p>
+        </div>
+        <div class="library-actions">
+          <a href="/libraries/<%= lib.id %>" class="btn btn-sm">Parcourir</a>
+          <form method="POST" action="/libraries/<%= lib.id %>/scan" style="display:inline">
+            <button type="submit" class="btn btn-sm btn-primary">Scanner</button>
+          </form>
+          <form method="POST" action="/libraries/<%= lib.id %>/delete" style="display:inline"
+                onsubmit="return confirm('Supprimer cette bibliothèque ?')">
+            <button type="submit" class="btn btn-sm btn-danger">Supprimer</button>
+          </form>
+        </div>
+      </div>
+    <% } %>
+  </div>
+<% } %>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Capsule<%= typeof pageTitle !== 'undefined' ? ' - ' + pageTitle : '' %></title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <% if (user) { %>
+  <nav class="navbar">
+    <a href="/dashboard" class="nav-brand">Capsule</a>
+    <form class="nav-search" action="/videos" method="GET">
+      <input type="text" name="q" placeholder="Rechercher une vidéo..." value="<%= typeof query !== 'undefined' ? query : '' %>">
+    </form>
+    <div class="nav-links">
+      <a href="/dashboard">Bibliothèques</a>
+      <span class="nav-user"><%= user.username %></span>
+      <a href="/logout" class="btn btn-sm">Déconnexion</a>
+    </div>
+  </nav>
+  <% } %>
+  <main class="container">
