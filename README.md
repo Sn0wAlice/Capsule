@@ -14,6 +14,7 @@ Application web self-hosted de gestion et lecture de vidéos. Organisez vos bibl
 - **Multi-utilisateur** — Rôles admin/user, partage de bibliothèques avec permissions lecture/écriture
 - **Thèmes** — Mode sombre et clair
 - **File watcher** — Détection automatique des nouveaux fichiers ajoutés aux bibliothèques
+- **Worker séparé** — Traitement ffmpeg (thumbnails, sprites, métadonnées) dans un processus dédié
 - **Docker ready** — Image Docker multi-arch (amd64/arm64), CI/CD GitHub Actions
 
 ## Stack
@@ -76,7 +77,9 @@ L'application est accessible sur `http://localhost:3000`.
 | `/media` | Point de montage pour vos fichiers vidéo |
 | `/var/lib/mysql` | Données MySQL (volume Docker) |
 
-Montez autant de dossiers que nécessaire dans le conteneur `app`, puis ajoutez-les comme bibliothèques dans l'interface :
+Montez les **mêmes volumes** sur les conteneurs `app` et `worker`. Le worker a besoin d'accéder aux fichiers pour générer les thumbnails.
+
+Montez autant de dossiers que nécessaire, puis ajoutez-les comme bibliothèques dans l'interface :
 
 ```yaml
 volumes:
@@ -97,6 +100,8 @@ volumes:
 | `SESSION_SECRET` | Secret pour les sessions | — |
 | `DISABLE_REGISTER` | Désactiver les inscriptions | `false` |
 | `MEDIA_PATH` | Chemin local des médias (compose) | `./media` |
+| `WORKER_CONCURRENCY` | Jobs ffmpeg en parallèle (worker) | `2` |
+| `WORKER_POLL_INTERVAL` | Intervalle de polling du worker (ms) | `3000` |
 
 ## CI/CD
 
@@ -108,6 +113,19 @@ Le workflow GitHub Actions (`.github/workflows/docker.yml`) build et push automa
 - **Multi-arch** — `linux/amd64` et `linux/arm64`
 
 L'image est disponible sur `ghcr.io/sn0walice/capsule`.
+
+## Architecture
+
+```
+┌─────────┐     ┌─────────┐     ┌─────────┐
+│   app   │────▶│  MySQL  │◀────│ worker  │
+│ (web)   │     │         │     │ (ffmpeg)│
+└─────────┘     └─────────┘     └─────────┘
+```
+
+- **app** — Serveur web Express (scan, streaming, API). Ne fait aucun appel ffmpeg.
+- **worker** — Processus séparé qui poll la table `jobs` et exécute les tâches ffmpeg (thumbnails, sprites, métadonnées). Si le worker crash, le serveur web continue de fonctionner.
+- **MySQL** — Base partagée. La table `jobs` sert de file d'attente entre app et worker.
 
 ## Administration
 
