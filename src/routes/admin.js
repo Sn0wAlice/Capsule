@@ -46,6 +46,32 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Requeue failed jobs
+router.post('/jobs/requeue-failed', async (req, res) => {
+  try {
+    const [result] = await pool.execute(
+      "UPDATE jobs SET status = 'pending', error = NULL, started_at = NULL, finished_at = NULL WHERE status = 'failed'"
+    );
+    res.redirect(`/admin?success=${result.affectedRows} job(s) failed relancé(s)`);
+  } catch (err) {
+    console.error('Requeue failed error:', err);
+    res.redirect('/admin?error=Erreur lors du requeue');
+  }
+});
+
+// Requeue stuck jobs (processing for more than 5 minutes)
+router.post('/jobs/requeue-stuck', async (req, res) => {
+  try {
+    const [result] = await pool.execute(
+      "UPDATE jobs SET status = 'pending', started_at = NULL WHERE status = 'processing' AND started_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE)"
+    );
+    res.redirect(`/admin?success=${result.affectedRows} job(s) stuck relancé(s)`);
+  } catch (err) {
+    console.error('Requeue stuck error:', err);
+    res.redirect('/admin?error=Erreur lors du requeue');
+  }
+});
+
 // Change user role
 router.post('/users/:id/role', async (req, res) => {
   const targetId = parseInt(req.params.id);

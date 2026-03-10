@@ -11,6 +11,8 @@ const CAPSULE_DIR = '.capsule';
 const POLL_INTERVAL = parseInt(process.env.WORKER_POLL_INTERVAL, 10) || 3000;
 const CONCURRENCY = parseInt(process.env.WORKER_CONCURRENCY, 10) || 1;
 const CLEANUP_INTERVAL = 1000 * 60 * 60; // cleanup done jobs every hour
+const STUCK_CHECK_INTERVAL = 1000 * 60 * 5; // check stuck jobs every 5 min
+const STUCK_THRESHOLD_MIN = 10; // jobs processing > 10 min are considered stuck
 
 let running = 0;
 let shuttingDown = false;
@@ -274,6 +276,22 @@ async function cleanup() {
   }
 }
 
+// ── Auto-reset stuck jobs ──
+
+async function resetStuckJobs() {
+  try {
+    const [result] = await pool.execute(
+      `UPDATE jobs SET status = 'pending', started_at = NULL
+       WHERE status = 'processing' AND started_at < DATE_SUB(NOW(), INTERVAL ${STUCK_THRESHOLD_MIN} MINUTE)`
+    );
+    if (result.affectedRows > 0) {
+      console.log(`[worker] Auto-reset ${result.affectedRows} stuck job(s)`);
+    }
+  } catch (err) {
+    console.error('[worker] Stuck check error:', err.message);
+  }
+}
+
 // ── Startup ──
 
 async function start() {
@@ -290,6 +308,7 @@ async function start() {
   console.log(`[worker] Started (poll=${POLL_INTERVAL}ms, concurrency=${CONCURRENCY})`);
   setInterval(poll, POLL_INTERVAL);
   setInterval(cleanup, CLEANUP_INTERVAL);
+  setInterval(resetStuckJobs, STUCK_CHECK_INTERVAL);
   poll();
 }
 

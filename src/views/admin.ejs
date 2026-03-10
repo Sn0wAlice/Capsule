@@ -63,13 +63,29 @@
 </div>
 
 <div class="card" style="margin-top: 2rem;">
-  <h2>File d'attente
-    <span class="text-muted" style="font-size:0.85rem; font-weight:400; margin-left:0.5rem;">
-      <% for (const s of jobStats) { %>
-        <span class="badge <%= s.status === 'processing' ? 'badge-accent' : s.status === 'pending' ? 'badge-info' : s.status === 'failed' ? 'badge-danger' : 'badge-success' %>"><%= s.count %> <%= s.status %></span>
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;">
+    <h2 style="margin:0;">File d'attente
+      <span class="text-muted" style="font-size:0.85rem; font-weight:400; margin-left:0.5rem;">
+        <% for (const s of jobStats) { %>
+          <span class="badge <%= s.status === 'processing' ? 'badge-accent' : s.status === 'pending' ? 'badge-info' : s.status === 'failed' ? 'badge-danger' : 'badge-success' %>"><%= s.count %> <%= s.status %></span>
+        <% } %>
+      </span>
+    </h2>
+    <div style="display:flex;gap:0.5rem;">
+      <% const failedCount = jobStats.find(s => s.status === 'failed'); %>
+      <% const processingCount = jobStats.find(s => s.status === 'processing'); %>
+      <% if (failedCount && failedCount.count > 0) { %>
+        <form method="POST" action="/admin/jobs/requeue-failed" style="display:inline">
+          <button type="submit" class="btn btn-sm btn-primary" onclick="return confirm('Relancer les <%= failedCount.count %> job(s) en erreur ?')">Requeue failed (<%= failedCount.count %>)</button>
+        </form>
       <% } %>
-    </span>
-  </h2>
+      <% if (processingCount && processingCount.count > 0) { %>
+        <form method="POST" action="/admin/jobs/requeue-stuck" style="display:inline">
+          <button type="submit" class="btn btn-sm" onclick="return confirm('Relancer les jobs bloqués en processing ?')">Requeue stuck</button>
+        </form>
+      <% } %>
+    </div>
+  </div>
   <% if (jobs.length === 0) { %>
     <p class="text-muted">Aucun job en attente.</p>
   <% } else { %>
