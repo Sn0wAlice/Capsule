@@ -126,7 +126,7 @@ async function generateSprite(videoPath, libraryPath, duration) {
   // Filter: grab 1 frame from each input, scale small, hstack
   const filters = [];
   for (let i = 0; i < SPRITE_FRAMES; i++) {
-    filters.push(`[${i}:v]frames=1,scale=160:-2:flags=fast_bilinear[v${i}]`);
+    filters.push(`[${i}:v]trim=end_frame=1,scale=160:-2:flags=fast_bilinear[v${i}]`);
   }
   const stack = Array.from({ length: SPRITE_FRAMES }, (_, i) => `[v${i}]`).join('');
   filters.push(`${stack}hstack=inputs=${SPRITE_FRAMES}`);
