@@ -1,33 +1,5 @@
 <%- include('partials/header') %>
 
-<div class="page-header">
-  <h1>Recherche : "<%= query %>"</h1>
-  <p class="text-muted"><%= videos.length %> résultat(s)</p>
-</div>
-
-<% if (videos.length > 0) { %>
-  <div class="search-list">
-    <% for (const video of videos) { %>
-      <a href="/videos/<%= video.id %>" class="search-item">
-        <div class="search-item-preview">
-          <% if (video.thumb) { %>
-            <img src="/videos/<%= video.id %>/thumb" alt="" loading="lazy">
-          <% } %>
-        </div>
-        <div class="search-item-info">
-          <span class="search-item-title"><%= video.title || video.filename %></span>
-          <span class="search-item-meta"><%= video.library_name %> &mdash; <%= video.filepath %></span>
-          <span class="search-item-meta"><%= formatSize(video.size) %></span>
-        </div>
-      </a>
-    <% } %>
-  </div>
-<% } else { %>
-  <div class="empty-state">
-    <p>Aucune vidéo trouvée pour "<%= query %>".</p>
-  </div>
-<% } %>
-
 <%
 function formatSize(bytes) {
   if (!bytes) return '—';
@@ -37,6 +9,114 @@ function formatSize(bytes) {
   while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
   return size.toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
 }
+function formatDuration(seconds) {
+  if (!seconds) return '—';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  return m + ':' + String(s).padStart(2, '0');
+}
+
+function buildUrl(overrides) {
+  const p = { q: query || '' };
+  if (tagFilter) p.tag = tagFilter;
+  if (durationFilter) p.duration = durationFilter;
+  if (resolutionFilter) p.resolution = resolutionFilter;
+  if (codecFilter) p.codec = codecFilter;
+  Object.assign(p, overrides);
+  // Remove empty
+  Object.keys(p).forEach(k => { if (!p[k]) delete p[k]; });
+  const qs = Object.entries(p).map(([k,v]) => k + '=' + encodeURIComponent(v)).join('&');
+  return '/videos?' + qs;
+}
 %>
+
+<div class="page-header">
+  <h1>Recherche<% if (query) { %> : "<%= query %>"<% } %></h1>
+  <p class="text-muted"><%= videos.length %> résultat(s)</p>
+</div>
+
+<!-- Filter bar -->
+<div class="filter-bar">
+  <div class="filter-group">
+    <span class="filter-label">Tags :</span>
+    <% if (typeof userTags !== 'undefined') { %>
+      <% for (const t of userTags) { %>
+        <a href="<%= buildUrl({ tag: tagFilter === t.name ? '' : t.name }) %>"
+           class="filter-tag <%= tagFilter === t.name ? 'active' : '' %>"
+           style="--tag-color: <%= t.color || 'gray' %>"><%= t.name %></a>
+      <% } %>
+    <% } %>
+  </div>
+
+  <div class="filter-group">
+    <span class="filter-label">Durée :</span>
+    <a href="<%= buildUrl({ duration: durationFilter === 'short' ? '' : 'short' }) %>"
+       class="filter-tag <%= durationFilter === 'short' ? 'active' : '' %>">&lt; 5 min</a>
+    <a href="<%= buildUrl({ duration: durationFilter === 'medium' ? '' : 'medium' }) %>"
+       class="filter-tag <%= durationFilter === 'medium' ? 'active' : '' %>">5-20 min</a>
+    <a href="<%= buildUrl({ duration: durationFilter === 'long' ? '' : 'long' }) %>"
+       class="filter-tag <%= durationFilter === 'long' ? 'active' : '' %>">20-60 min</a>
+    <a href="<%= buildUrl({ duration: durationFilter === 'vlong' ? '' : 'vlong' }) %>"
+       class="filter-tag <%= durationFilter === 'vlong' ? 'active' : '' %>">&gt; 1h</a>
+  </div>
+
+  <div class="filter-group">
+    <span class="filter-label">Résolution :</span>
+    <a href="<%= buildUrl({ resolution: resolutionFilter === '4k' ? '' : '4k' }) %>"
+       class="filter-tag <%= resolutionFilter === '4k' ? 'active' : '' %>">4K</a>
+    <a href="<%= buildUrl({ resolution: resolutionFilter === '1080p' ? '' : '1080p' }) %>"
+       class="filter-tag <%= resolutionFilter === '1080p' ? 'active' : '' %>">1080p</a>
+    <a href="<%= buildUrl({ resolution: resolutionFilter === '720p' ? '' : '720p' }) %>"
+       class="filter-tag <%= resolutionFilter === '720p' ? 'active' : '' %>">720p</a>
+    <a href="<%= buildUrl({ resolution: resolutionFilter === 'sd' ? '' : 'sd' }) %>"
+       class="filter-tag <%= resolutionFilter === 'sd' ? 'active' : '' %>">SD</a>
+  </div>
+
+  <div class="filter-group">
+    <span class="filter-label">Codec :</span>
+    <a href="<%= buildUrl({ codec: codecFilter === 'h264' ? '' : 'h264' }) %>"
+       class="filter-tag <%= codecFilter === 'h264' ? 'active' : '' %>">H.264</a>
+    <a href="<%= buildUrl({ codec: codecFilter === 'hevc' ? '' : 'hevc' }) %>"
+       class="filter-tag <%= codecFilter === 'hevc' ? 'active' : '' %>">HEVC</a>
+    <a href="<%= buildUrl({ codec: codecFilter === 'av1' ? '' : 'av1' }) %>"
+       class="filter-tag <%= codecFilter === 'av1' ? 'active' : '' %>">AV1</a>
+    <a href="<%= buildUrl({ codec: codecFilter === 'vp9' ? '' : 'vp9' }) %>"
+       class="filter-tag <%= codecFilter === 'vp9' ? 'active' : '' %>">VP9</a>
+  </div>
+
+  <% if (tagFilter || durationFilter || resolutionFilter || codecFilter) { %>
+    <a href="/videos?q=<%= encodeURIComponent(query || '') %>" class="filter-clear">Effacer filtres</a>
+  <% } %>
+</div>
+
+<% if (videos.length > 0) { %>
+  <div class="video-grid">
+    <% for (const video of videos) { %>
+      <a href="/videos/<%= video.id %>" class="video-card">
+        <div class="video-card-preview">
+          <% if (video.thumb) { %>
+            <img src="/videos/<%= video.id %>/thumb" alt="" loading="lazy" decoding="async">
+          <% } %>
+          <% if (video.duration) { %>
+            <span class="video-card-duration"><%= formatDuration(video.duration) %></span>
+          <% } %>
+        </div>
+        <div class="video-card-info">
+          <span class="video-card-title"><%= video.title || video.filename %></span>
+          <span class="video-card-meta"><%= video.library_name %> &mdash; <%= formatSize(video.size) %></span>
+          <% if (video.width && video.height) { %>
+            <span class="video-card-meta"><%= video.width %>x<%= video.height %><% if (video.codec) { %> &mdash; <%= video.codec %><% } %></span>
+          <% } %>
+        </div>
+      </a>
+    <% } %>
+  </div>
+<% } else { %>
+  <div class="empty-state">
+    <p>Aucune vidéo trouvée<% if (query) { %> pour "<%= query %>"<% } %>.</p>
+  </div>
+<% } %>
 
 <%- include('partials/footer') %>

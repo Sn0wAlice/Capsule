@@ -25,8 +25,14 @@ router.post('/add', async (req, res) => {
     return res.redirect('/dashboard?error=Nom et chemin requis');
   }
 
-  if (!fs.existsSync(libPath)) {
+  const resolvedPath = path.resolve(libPath);
+  if (!fs.existsSync(resolvedPath)) {
     return res.redirect('/dashboard?error=Le chemin n\'existe pas');
+  }
+  // Block system-sensitive paths
+  const blockedPaths = ['/', '/etc', '/root', '/var', '/usr', '/bin', '/sbin', '/sys', '/proc', '/dev'];
+  if (blockedPaths.includes(resolvedPath) || resolvedPath.startsWith('/etc/') || resolvedPath.startsWith('/proc/')) {
+    return res.redirect('/dashboard?error=Ce chemin n\'est pas autorisé');
   }
 
   try {
@@ -234,18 +240,23 @@ router.post('/:id/reset-previews', async (req, res) => {
           [libraryId]
         );
 
-        // Re-enqueue all videos
+        // Re-enqueue all videos (batch insert)
         const [videos] = await pool.execute(
           'SELECT id, filepath FROM videos WHERE library_id = ?',
           [libraryId]
         );
 
-        for (const v of videos) {
-          const fullPath = path.join(libraryPath, v.filepath);
-          await pool.execute(
-            'INSERT IGNORE INTO jobs (video_id, library_path, video_path) VALUES (?, ?, ?)',
-            [v.id, libraryPath, fullPath]
-          );
+        if (videos.length > 0) {
+          const BATCH = 500;
+          for (let i = 0; i < videos.length; i += BATCH) {
+            const batch = videos.slice(i, i + BATCH);
+            const placeholders = batch.map(() => '(?, ?, ?)').join(', ');
+            const values = batch.flatMap(v => [v.id, libraryPath, path.join(libraryPath, v.filepath)]);
+            await pool.query(
+              `INSERT IGNORE INTO jobs (video_id, library_path, video_path) VALUES ${placeholders}`,
+              values
+            );
+          }
         }
         console.log(`[reset-previews] Done for library ${libraryId}: ${videos.length} jobs enqueued`);
       } catch (err) {
@@ -257,6 +268,37 @@ router.post('/:id/reset-previews', async (req, res) => {
   } catch (err) {
     console.error('Reset previews error:', err);
     res.redirect(`/libraries/${libraryId}?error=Erreur lors du reset`);
+  }
+});
+
+// Scan/job progress API for a library
+router.get('/:id/progress', async (req, res) => {
+  try {
+    const access = await getLibraryAccess(req.session.user.id, req.params.id, req.session.user.role);
+    if (!access.allowed) return res.json({ total: 0, done: 0, pending: 0, processing: 0, failed: 0 });
+
+    const [rows] = await pool.execute(
+      `SELECT j.status, COUNT(*) as cnt
+       FROM jobs j JOIN videos v ON v.id = j.video_id
+       WHERE v.library_id = ?
+       GROUP BY j.status`,
+      [req.params.id]
+    );
+
+    const counts = { pending: 0, processing: 0, done: 0, failed: 0 };
+    let total = 0;
+    for (const r of rows) {
+      total += r.cnt;
+      if (r.status === 'pending') counts.pending = r.cnt;
+      else if (r.status === 'processing') counts.processing = r.cnt;
+      else if (r.status === 'done') counts.done = r.cnt;
+      else if (r.status === 'failed') counts.failed = r.cnt;
+    }
+
+    res.json({ total, ...counts, active: counts.pending + counts.processing > 0 });
+  } catch (err) {
+    console.error('Progress API error:', err);
+    res.json({ total: 0, done: 0, pending: 0, processing: 0, failed: 0, active: false });
   }
 });
 

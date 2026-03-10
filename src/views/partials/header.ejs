@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Capsule<%= typeof pageTitle !== 'undefined' ? ' - ' + pageTitle : '' %></title>
   <link rel="stylesheet" href="/css/style.css">
+  <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
+    <meta name="csrf-token" content="<%= csrfToken %>">
+  <% } %>
 </head>
 <body>
   <% if (user) { %>
@@ -17,6 +20,7 @@
       <a href="/dashboard">Bibliothèques</a>
       <a href="/playlists">Playlists</a>
       <a href="/duplicates">Doublons</a>
+      <a href="/tags">Tags</a>
       <% if (user.role === 'admin') { %>
         <a href="/admin">Admin</a>
       <% } %>
@@ -69,6 +73,27 @@
       });
       menu.classList.remove('open');
     });
+  </script>
+  <script>
+    // Auto-inject CSRF token in all fetch() calls
+    (function() {
+      var meta = document.querySelector('meta[name="csrf-token"]');
+      if (!meta) return;
+      window._csrfToken = meta.getAttribute('content');
+      var _fetch = window.fetch;
+      window.fetch = function(url, opts) {
+        opts = opts || {};
+        if (opts.method && opts.method !== 'GET' && opts.method !== 'HEAD') {
+          opts.headers = opts.headers || {};
+          if (opts.headers instanceof Headers) {
+            opts.headers.set('X-CSRF-Token', window._csrfToken);
+          } else {
+            opts.headers['X-CSRF-Token'] = window._csrfToken;
+          }
+        }
+        return _fetch.call(this, url, opts);
+      };
+    })();
   </script>
   <% } %>
   <main class="container">

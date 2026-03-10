@@ -8,6 +8,15 @@ const { CAPSULE_DIR } = require('../services/scanner');
 const router = express.Router();
 router.use(requireAuth);
 
+// Validate that a resolved path stays within its parent directory
+function safePath(basePath, relativePath) {
+  const resolved = path.resolve(basePath, relativePath);
+  if (!resolved.startsWith(path.resolve(basePath) + path.sep) && resolved !== path.resolve(basePath)) {
+    return null;
+  }
+  return resolved;
+}
+
 // Helper: get video with library info and check access
 async function getVideoWithAccess(videoId, userId, userRole) {
   const [rows] = await pool.execute(
@@ -41,8 +50,8 @@ router.get('/:id/thumb', async (req, res) => {
     const access = await getLibraryAccess(req.session.user.id, rows[0].library_id, req.session.user.role);
     if (!access.allowed) return res.status(404).send('');
 
-    const thumbPath = path.join(rows[0].library_path, CAPSULE_DIR, rows[0].filename);
-    if (!fs.existsSync(thumbPath)) return res.status(404).send('');
+    const thumbPath = safePath(path.join(rows[0].library_path, CAPSULE_DIR), rows[0].filename);
+    if (!thumbPath || !fs.existsSync(thumbPath)) return res.status(404).send('');
 
     res.setHeader('Content-Type', 'image/jpeg');
     res.setHeader('Cache-Control', 'public, max-age=86400');
@@ -69,8 +78,8 @@ router.get('/:id/sprite', async (req, res) => {
     const access = await getLibraryAccess(req.session.user.id, rows[0].library_id, req.session.user.role);
     if (!access.allowed) return res.status(404).send('');
 
-    const spritePath = path.join(rows[0].library_path, CAPSULE_DIR, rows[0].sprite_filename);
-    if (!fs.existsSync(spritePath)) return res.status(404).send('');
+    const spritePath = safePath(path.join(rows[0].library_path, CAPSULE_DIR), rows[0].sprite_filename);
+    if (!spritePath || !fs.existsSync(spritePath)) return res.status(404).send('');
 
     res.setHeader('Content-Type', 'image/jpeg');
     res.setHeader('Cache-Control', 'public, max-age=86400');
@@ -95,6 +104,28 @@ router.post('/:id/progress', async (req, res) => {
   } catch (err) {
     console.error('Progress save error:', err);
     res.status(500).json({ error: 'save failed' });
+  }
+});
+
+// Toggle watchlist (user-scoped)
+router.post('/:id/watchlist', async (req, res) => {
+  try {
+    const [existing] = await pool.execute(
+      'SELECT id FROM watchlist WHERE user_id = ? AND video_id = ?',
+      [req.session.user.id, req.params.id]
+    );
+    if (existing.length > 0) {
+      await pool.execute('DELETE FROM watchlist WHERE user_id = ? AND video_id = ?',
+        [req.session.user.id, req.params.id]);
+      res.json({ watchlisted: false });
+    } else {
+      await pool.execute('INSERT INTO watchlist (user_id, video_id) VALUES (?, ?)',
+        [req.session.user.id, req.params.id]);
+      res.json({ watchlisted: true });
+    }
+  } catch (err) {
+    console.error('Watchlist error:', err);
+    res.status(500).json({ error: 'toggle failed' });
   }
 });
 
@@ -258,29 +289,202 @@ router.get('/api/tags', async (req, res) => {
   }
 });
 
+// === Bulk operations ===
+
+// Bulk add tag
+router.post('/bulk/tag', async (req, res) => {
+  try {
+    const { videoIds, tagName } = req.body;
+    if (!Array.isArray(videoIds) || !tagName) return res.status(400).json({ error: 'Invalid params' });
+
+    const userId = req.session.user.id;
+    // Get or create tag
+    let [tags] = await pool.execute('SELECT id FROM tags WHERE user_id = ? AND name = ?', [userId, tagName.trim()]);
+    let tagId;
+    if (tags.length > 0) {
+      tagId = tags[0].id;
+    } else {
+      const [result] = await pool.execute('INSERT INTO tags (user_id, name) VALUES (?, ?)', [userId, tagName.trim()]);
+      tagId = result.insertId;
+    }
+
+    // Bulk insert (ignore duplicates)
+    if (videoIds.length > 0) {
+      const placeholders = videoIds.map(() => '(?, ?)').join(', ');
+      const values = videoIds.flatMap(id => [parseInt(id), tagId]);
+      await pool.query(`INSERT IGNORE INTO video_tags (video_id, tag_id) VALUES ${placeholders}`, values);
+    }
+
+    res.json({ ok: true, count: videoIds.length });
+  } catch (err) {
+    console.error('Bulk tag error:', err);
+    res.status(500).json({ error: 'Erreur' });
+  }
+});
+
+// Bulk add to playlist
+router.post('/bulk/playlist', async (req, res) => {
+  try {
+    const { videoIds, playlistId } = req.body;
+    if (!Array.isArray(videoIds) || !playlistId) return res.status(400).json({ error: 'Invalid params' });
+
+    const userId = req.session.user.id;
+    // Verify playlist ownership
+    const [pl] = await pool.execute('SELECT id FROM playlists WHERE id = ? AND user_id = ?', [playlistId, userId]);
+    if (pl.length === 0) return res.status(403).json({ error: 'Playlist non trouvée' });
+
+    // Get max position
+    const [maxPos] = await pool.execute('SELECT MAX(position) as maxp FROM playlist_items WHERE playlist_id = ?', [playlistId]);
+    let pos = (maxPos[0].maxp || 0) + 1;
+
+    for (const vid of videoIds) {
+      try {
+        await pool.execute('INSERT IGNORE INTO playlist_items (playlist_id, video_id, position) VALUES (?, ?, ?)',
+          [playlistId, parseInt(vid), pos++]);
+      } catch {}
+    }
+
+    res.json({ ok: true, count: videoIds.length });
+  } catch (err) {
+    console.error('Bulk playlist error:', err);
+    res.status(500).json({ error: 'Erreur' });
+  }
+});
+
+// Bulk delete videos
+router.post('/bulk/delete', async (req, res) => {
+  try {
+    const { videoIds } = req.body;
+    if (!Array.isArray(videoIds) || videoIds.length === 0) return res.status(400).json({ error: 'Invalid params' });
+
+    const userId = req.session.user.id;
+    const userRole = req.session.user.role;
+
+    // Verify access to each video's library (must have write access)
+    const ids = videoIds.map(id => parseInt(id));
+    const [videos] = await pool.query(
+      'SELECT v.id, v.library_id FROM videos v WHERE v.id IN (?)', [ids]
+    );
+
+    const libChecked = {};
+    const allowedIds = [];
+    for (const v of videos) {
+      if (!(v.library_id in libChecked)) {
+        const access = await getLibraryAccess(userId, v.library_id, userRole);
+        libChecked[v.library_id] = access.allowed && canWrite(access.permission);
+      }
+      if (libChecked[v.library_id]) allowedIds.push(v.id);
+    }
+
+    if (allowedIds.length > 0) {
+      await pool.query('DELETE FROM videos WHERE id IN (?)', [allowedIds]);
+    }
+
+    res.json({ ok: true, deleted: allowedIds.length });
+  } catch (err) {
+    console.error('Bulk delete error:', err);
+    res.status(500).json({ error: 'Erreur' });
+  }
+});
+
 // Search videos (across all accessible libraries)
 router.get('/', async (req, res) => {
   const q = (req.query.q || '').trim();
-  if (!q) return res.redirect('/dashboard');
+  const tagFilter = req.query.tag || '';
+  const durationFilter = req.query.duration || '';
+  const resolutionFilter = req.query.resolution || '';
+  const codecFilter = req.query.codec || '';
+
+  const hasFilters = tagFilter || durationFilter || resolutionFilter || codecFilter;
+  if (!q && !hasFilters) return res.redirect('/dashboard');
 
   try {
-    const libIds = await getAccessibleLibraryIds(req.session.user.id, req.session.user.role);
-    if (libIds.length === 0) return res.render('search', { pageTitle: 'Recherche', query: q, videos: [] });
+    const userId = req.session.user.id;
+    const libIds = await getAccessibleLibraryIds(userId, req.session.user.role);
 
-    const [videos] = await pool.query(
-      `SELECT v.*, l.name as library_name, t.filename as thumb
-       FROM videos v
-       JOIN libraries l ON l.id = v.library_id
-       LEFT JOIN thumbnails t ON t.video_id = v.id
-       WHERE l.id IN (?) AND (v.title LIKE ? OR v.filename LIKE ?)
-       ORDER BY v.title ASC
-       LIMIT 100`,
-      [libIds, `%${q}%`, `%${q}%`]
+    // Load user's tags for the filter bar
+    const [userTags] = await pool.execute(
+      'SELECT id, name, color FROM tags WHERE user_id = ? ORDER BY name', [userId]
     );
-    res.render('search', { pageTitle: 'Recherche', query: q, videos });
+
+    if (libIds.length === 0) return res.render('search', {
+      pageTitle: 'Recherche', query: q, videos: [], userTags,
+      tagFilter, durationFilter, resolutionFilter, codecFilter
+    });
+
+    // Build dynamic query
+    let joins = `FROM videos v
+      JOIN libraries l ON l.id = v.library_id
+      LEFT JOIN thumbnails t ON t.video_id = v.id`;
+    const conditions = ['l.id IN (?)'];
+    const params = [libIds];
+    let selectExtra = '';
+    let orderBy = 'v.title ASC';
+
+    // Tag filter
+    if (tagFilter) {
+      joins += `\n      JOIN video_tags vt ON vt.video_id = v.id
+      JOIN tags tg ON tg.id = vt.tag_id`;
+      conditions.push('tg.user_id = ? AND tg.name = ?');
+      params.push(userId, tagFilter);
+    }
+
+    // Text search
+    if (q) {
+      const useFulltext = q.length >= 3;
+      if (useFulltext) {
+        selectExtra = ', MATCH(v.filename, v.title) AGAINST(? IN BOOLEAN MODE) as relevance';
+        params.unshift(`*${q}*`); // for selectExtra
+        conditions.push('MATCH(v.filename, v.title) AGAINST(? IN BOOLEAN MODE)');
+        params.push(`*${q}*`);
+        orderBy = 'relevance DESC';
+      } else {
+        conditions.push('(v.title LIKE ? OR v.filename LIKE ?)');
+        params.push(`%${q}%`, `%${q}%`);
+      }
+    }
+
+    // Duration filter
+    if (durationFilter) {
+      switch (durationFilter) {
+        case 'short':   conditions.push('v.duration < 300'); break;       // < 5 min
+        case 'medium':  conditions.push('v.duration >= 300 AND v.duration < 1200'); break; // 5-20 min
+        case 'long':    conditions.push('v.duration >= 1200 AND v.duration < 3600'); break; // 20-60 min
+        case 'vlong':   conditions.push('v.duration >= 3600'); break;     // > 1h
+      }
+    }
+
+    // Resolution filter
+    if (resolutionFilter) {
+      switch (resolutionFilter) {
+        case '4k':    conditions.push('v.height >= 2160'); break;
+        case '1080p': conditions.push('v.height >= 1080 AND v.height < 2160'); break;
+        case '720p':  conditions.push('v.height >= 720 AND v.height < 1080'); break;
+        case 'sd':    conditions.push('v.height < 720'); break;
+      }
+    }
+
+    // Codec filter
+    if (codecFilter) {
+      conditions.push('v.codec = ?');
+      params.push(codecFilter);
+    }
+
+    const sql = `SELECT v.*, l.name as library_name, t.filename as thumb${selectExtra}
+      ${joins}
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY ${orderBy}
+      LIMIT 100`;
+
+    const [videos] = await pool.query(sql, params);
+    res.render('search', {
+      pageTitle: 'Recherche', query: q, videos, userTags,
+      tagFilter, durationFilter, resolutionFilter, codecFilter
+    });
   } catch (err) {
     console.error('Search error:', err);
-    res.render('search', { pageTitle: 'Recherche', query: q, videos: [] });
+    res.render('search', { pageTitle: 'Recherche', query: q, videos: [], userTags: [],
+      tagFilter: '', durationFilter: '', resolutionFilter: '', codecFilter: '' });
   }
 });
 
@@ -300,9 +504,8 @@ router.get('/:id/stream', async (req, res) => {
     const access = await getLibraryAccess(req.session.user.id, video.library_id, req.session.user.role);
     if (!access.allowed) return res.status(404).send('Video not found');
 
-    const filePath = path.join(video.library_path, video.filepath);
-
-    if (!fs.existsSync(filePath)) {
+    const filePath = safePath(video.library_path, video.filepath);
+    if (!filePath || !fs.existsSync(filePath)) {
       return res.status(404).send('File not found on disk');
     }
 
@@ -356,6 +559,13 @@ router.get('/:id', async (req, res) => {
       [req.session.user.id, video.id]
     );
     const isFavorite = favRows.length > 0;
+
+    // Check if in watchlist
+    const [wlRows] = await pool.execute(
+      'SELECT id FROM watchlist WHERE user_id = ? AND video_id = ?',
+      [req.session.user.id, video.id]
+    );
+    const isWatchlisted = wlRows.length > 0;
 
     // Record in watch history + increment view count
     await pool.execute(
@@ -412,6 +622,7 @@ router.get('/:id', async (req, res) => {
       similar: simRows,
       savedProgress,
       isFavorite,
+      isWatchlisted,
       breadcrumb,
       tags: tagRows,
       playlists: userPlaylists,

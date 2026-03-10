@@ -4,13 +4,29 @@ const express = require('express');
 const session = require('express-session');
 const MySQLStore = require('express-mysql-session')(session);
 const compression = require('compression');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 
 const pool = require('./config/database');
 const migrate = require('./config/migrate');
+const { csrfToken, csrfProtection } = require('./middleware/csrf');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Fail fast if session secret is not configured
+if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET === 'change_me') {
+  console.error('FATAL: SESSION_SECRET environment variable must be set to a strong random value.');
+  process.exit(1);
+}
+
+// Security headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
 
 // Gzip/Brotli compression
 app.use(compression());
@@ -19,9 +35,9 @@ app.use(compression());
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-// Body parsing
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+// Body parsing (with size limits)
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(express.json({ limit: '1mb' }));
 
 // Static files with cache
 app.use(express.static(path.join(__dirname, 'public'), {
@@ -38,12 +54,32 @@ const sessionStore = new MySQLStore({
 
 app.use(session({
   key: 'capsule_sid',
-  secret: process.env.SESSION_SECRET || 'change_me',
+  secret: process.env.SESSION_SECRET,
   store: sessionStore,
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 86400000 },
+  cookie: {
+    maxAge: 86400000,
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
+  },
 }));
+
+// CSRF: generate token for templates + validate on POST/PUT/DELETE
+app.use(csrfToken);
+app.use(csrfProtection);
+
+// Rate limiting on auth routes
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 15, // 15 attempts per window
+  message: 'Trop de tentatives, réessayez dans 15 minutes.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/login', authLimiter);
+app.use('/register', authLimiter);
 
 // Make user available in all templates
 app.use((req, res, next) => {
@@ -59,6 +95,7 @@ const playlistsRoutes = require('./routes/playlists');
 const settingsRoutes = require('./routes/settings');
 
 const adminRoutes = require('./routes/admin');
+const tagsRoutes = require('./routes/tags');
 
 app.use('/', authRoutes);
 app.use('/libraries', librariesRoutes);
@@ -66,6 +103,7 @@ app.use('/playlists', playlistsRoutes);
 app.use('/settings', settingsRoutes);
 app.use('/videos', videosRoutes);
 app.use('/admin', adminRoutes);
+app.use('/tags', tagsRoutes);
 
 const { requireAuth, getAccessibleLibraryIds } = require('./middleware/auth');
 
@@ -176,17 +214,34 @@ app.get('/dashboard', requireAuth, async (req, res) => {
       );
     }
 
+    // Watchlist
+    let watchlist = [];
+    if (libIds.length > 0) {
+      [watchlist] = await pool.query(
+        `SELECT v.id, v.filename, v.title, v.size, v.duration, t.filename as thumb
+         FROM watchlist w
+         JOIN videos v ON v.id = w.video_id
+         JOIN libraries l ON l.id = v.library_id
+         LEFT JOIN thumbnails t ON t.video_id = v.id
+         WHERE w.user_id = ? AND l.id IN (?)
+         ORDER BY w.created_at DESC
+         LIMIT 12`,
+        [userId, libIds]
+      );
+    }
+
     res.render('dashboard', {
       pageTitle: 'Bibliothèques',
       libraries,
       sharedLibraries,
       history,
       favorites,
+      watchlist,
       error: req.query.error || null,
     });
   } catch (err) {
     console.error('Dashboard error:', err);
-    res.render('dashboard', { pageTitle: 'Bibliothèques', libraries: [], sharedLibraries: [], history: [], favorites: [], error: 'Erreur serveur' });
+    res.render('dashboard', { pageTitle: 'Bibliothèques', libraries: [], sharedLibraries: [], history: [], favorites: [], watchlist: [], error: 'Erreur serveur' });
   }
 });
 

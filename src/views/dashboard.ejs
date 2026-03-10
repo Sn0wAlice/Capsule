@@ -77,6 +77,31 @@ function formatDuration(seconds) {
   </div>
 <% } %>
 
+<!-- Watchlist -->
+<% if (watchlist.length > 0) { %>
+  <div class="dashboard-section">
+    <h2 class="section-title">A regarder</h2>
+    <div class="video-grid">
+      <% for (const v of watchlist) { %>
+        <a href="/videos/<%= v.id %>" class="video-card">
+          <div class="video-card-preview">
+            <% if (v.thumb) { %>
+              <img src="/videos/<%= v.id %>/thumb" alt="" loading="lazy" decoding="async">
+            <% } %>
+            <% if (v.duration) { %>
+              <span class="video-card-duration"><%= formatDuration(v.duration) %></span>
+            <% } %>
+          </div>
+          <div class="video-card-info">
+            <span class="video-card-title"><%= v.title || v.filename %></span>
+            <span class="video-card-meta"><%= formatSize(v.size) %></span>
+          </div>
+        </a>
+      <% } %>
+    </div>
+  </div>
+<% } %>
+
 <!-- Add library -->
 <div class="card">
   <h2>Ajouter une bibliothèque</h2>
@@ -199,24 +224,45 @@ function loadShares(libId) {
       for (const s of data.shares) {
         const div = document.createElement('div');
         div.className = 'share-row';
-        div.innerHTML =
-          '<span class="share-username">' + s.username + '</span>' +
-          '<span class="badge ' + (s.permission === 'write' ? 'badge-success' : 'badge-info') + '">' +
-            (s.permission === 'write' ? 'Lecture/Écriture' : 'Lecture') +
-          '</span>' +
-          '<button class="btn btn-sm btn-danger" onclick="removeShare(' + libId + ',' + s.id + ')">Retirer</button>';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'share-username';
+        nameSpan.textContent = s.username;
+
+        const badgeSpan = document.createElement('span');
+        badgeSpan.className = 'badge ' + (s.permission === 'write' ? 'badge-success' : 'badge-info');
+        badgeSpan.textContent = s.permission === 'write' ? 'Lecture/Écriture' : 'Lecture';
+
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'btn btn-sm btn-danger';
+        removeBtn.textContent = 'Retirer';
+        removeBtn.addEventListener('click', () => removeShare(libId, s.id));
+
+        div.appendChild(nameSpan);
+        div.appendChild(badgeSpan);
+        div.appendChild(removeBtn);
         list.appendChild(div);
       }
       if (data.shares.length === 0) {
-        list.innerHTML = '<p class="text-muted">Aucun partage</p>';
+        const p = document.createElement('p');
+        p.className = 'text-muted';
+        p.textContent = 'Aucun partage';
+        list.appendChild(p);
       }
 
       const sharedUserIds = new Set(data.shares.map(s => s.user_id));
       const select = document.getElementById('share-user-select');
-      select.innerHTML = '<option value="">Choisir un utilisateur...</option>';
+      select.textContent = '';
+      const defaultOpt = document.createElement('option');
+      defaultOpt.value = '';
+      defaultOpt.textContent = 'Choisir un utilisateur...';
+      select.appendChild(defaultOpt);
       for (const u of data.users) {
         if (!sharedUserIds.has(u.id)) {
-          select.innerHTML += '<option value="' + u.id + '">' + u.username + '</option>';
+          const opt = document.createElement('option');
+          opt.value = u.id;
+          opt.textContent = u.username;
+          select.appendChild(opt);
         }
       }
     });

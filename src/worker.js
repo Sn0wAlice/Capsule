@@ -105,53 +105,6 @@ async function generateThumbnail(videoPath, libraryPath, duration) {
   }
 }
 
-// ── Sprite ──
-// Fast-seek to each timestamp, extract 1 frame, hstack.
-
-const SPRITE_FRAMES = 8;
-
-async function generateSprite(videoPath, libraryPath, duration) {
-  if (!duration || duration < 4) return null;
-  const thumbDir = path.join(libraryPath, CAPSULE_DIR);
-  fs.mkdirSync(thumbDir, { recursive: true });
-  const spriteName = crypto.randomUUID() + '_sprite.jpg';
-  const spritePath = path.join(thumbDir, spriteName);
-  const interval = duration / (SPRITE_FRAMES + 1);
-
-  // Build args: 8x fast-seek inputs, skip audio/subs
-  const args = ['-v', 'error'];
-  for (let i = 0; i < SPRITE_FRAMES; i++) {
-    const seekTo = Math.max(1, Math.floor((i + 1) * interval));
-    args.push('-ss', String(seekTo), '-i', videoPath);
-  }
-
-  // Filter: grab 1 frame from each input, scale small, hstack
-  const filters = [];
-  for (let i = 0; i < SPRITE_FRAMES; i++) {
-    filters.push(`[${i}:v]trim=end_frame=1,scale=160:-2:flags=fast_bilinear[v${i}]`);
-  }
-  const stack = Array.from({ length: SPRITE_FRAMES }, (_, i) => `[v${i}]`).join('');
-  filters.push(`${stack}hstack=inputs=${SPRITE_FRAMES}`);
-
-  args.push(
-    '-an', '-sn', '-dn',
-    '-filter_complex', filters.join(';'),
-    '-frames:v', '1',
-    '-q:v', '10',
-    '-threads', '1',
-    '-y', spritePath,
-  );
-
-  try {
-    await run('ffmpeg', args, { timeout: 60000 });
-    return spriteName;
-  } catch (err) {
-    console.error(`[worker] Sprite failed: ${err.message}`);
-    try { fs.unlinkSync(spritePath); } catch {}
-    return null;
-  }
-}
-
 // ── Process a single job ──
 
 async function processJob(job) {
@@ -196,23 +149,12 @@ async function processJob(job) {
     }
 
     // 2. Thumbnail (at 10% of duration)
-    const [existingThumb] = await pool.execute('SELECT id, sprite_filename FROM thumbnails WHERE video_id = ?', [video_id]);
-    let hasThumb = existingThumb.length > 0;
-    let hasSprite = hasThumb && !!existingThumb[0].sprite_filename;
+    const [existingThumb] = await pool.execute('SELECT id FROM thumbnails WHERE video_id = ?', [video_id]);
 
-    if (!hasThumb) {
+    if (existingThumb.length === 0) {
       const thumbName = await generateThumbnail(video_path, library_path, videoDuration);
       if (thumbName) {
         await pool.execute('INSERT INTO thumbnails (video_id, filename) VALUES (?, ?)', [video_id, thumbName]);
-        hasThumb = true;
-      }
-    }
-
-    // 3. Sprite
-    if (hasThumb && !hasSprite && videoDuration) {
-      const spriteName = await generateSprite(video_path, library_path, videoDuration);
-      if (spriteName) {
-        await pool.execute('UPDATE thumbnails SET sprite_filename = ? WHERE video_id = ?', [spriteName, video_id]);
       }
     }
 

@@ -6,6 +6,17 @@ const { requireAdmin } = require('../middleware/auth');
 const router = express.Router();
 router.use(requireAdmin);
 
+async function auditLog(adminUser, action, targetType, targetId, details) {
+  try {
+    await pool.execute(
+      'INSERT INTO audit_logs (admin_id, admin_username, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?, ?)',
+      [adminUser.id, adminUser.username, action, targetType, targetId, details || null]
+    );
+  } catch (err) {
+    console.error('Audit log error:', err.message);
+  }
+}
+
 // Admin panel - list users
 router.get('/', async (req, res) => {
   try {
@@ -32,11 +43,16 @@ router.get('/', async (req, res) => {
       `SELECT status, COUNT(*) as count FROM jobs GROUP BY status`
     );
 
+    const [auditLogs] = await pool.execute(
+      'SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 30'
+    );
+
     res.render('admin', {
       pageTitle: 'Administration',
       users,
       jobs,
       jobStats,
+      auditLogs,
       success: req.query.success || null,
       error: req.query.error || null,
     });
@@ -52,6 +68,7 @@ router.post('/jobs/requeue-failed', async (req, res) => {
     const [result] = await pool.execute(
       "UPDATE jobs SET status = 'pending', error = NULL, started_at = NULL, finished_at = NULL WHERE status = 'failed'"
     );
+    await auditLog(req.session.user, 'requeue_failed', 'jobs', null, `${result.affectedRows} job(s)`);
     res.redirect(`/admin?success=${result.affectedRows} job(s) failed relancé(s)`);
   } catch (err) {
     console.error('Requeue failed error:', err);
@@ -65,6 +82,7 @@ router.post('/jobs/requeue-stuck', async (req, res) => {
     const [result] = await pool.execute(
       "UPDATE jobs SET status = 'pending', started_at = NULL WHERE status = 'processing' AND started_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE)"
     );
+    await auditLog(req.session.user, 'requeue_stuck', 'jobs', null, `${result.affectedRows} job(s)`);
     res.redirect(`/admin?success=${result.affectedRows} job(s) stuck relancé(s)`);
   } catch (err) {
     console.error('Requeue stuck error:', err);
@@ -80,7 +98,9 @@ router.post('/users/:id/role', async (req, res) => {
   }
   const newRole = req.body.role === 'admin' ? 'admin' : 'user';
   try {
+    const [targetUser] = await pool.execute('SELECT username FROM users WHERE id = ?', [targetId]);
     await pool.execute('UPDATE users SET role = ? WHERE id = ?', [newRole, targetId]);
+    await auditLog(req.session.user, 'change_role', 'user', targetId, `${targetUser[0]?.username || targetId} → ${newRole}`);
     res.redirect('/admin?success=Rôle modifié');
   } catch (err) {
     console.error('Role change error:', err);
@@ -95,7 +115,10 @@ router.post('/users/:id/delete', async (req, res) => {
     return res.redirect('/admin?error=Vous ne pouvez pas supprimer votre propre compte');
   }
   try {
+    const [targetUser] = await pool.execute('SELECT username FROM users WHERE id = ?', [targetId]);
+    const deletedUsername = targetUser[0]?.username || `id:${targetId}`;
     await pool.execute('DELETE FROM users WHERE id = ?', [targetId]);
+    await auditLog(req.session.user, 'delete_user', 'user', targetId, deletedUsername);
     res.redirect('/admin?success=Compte supprimé');
   } catch (err) {
     console.error('User delete error:', err);
@@ -111,7 +134,10 @@ router.post('/users/:id/password', async (req, res) => {
   }
   try {
     const hash = await bcrypt.hash(password, 10);
-    await pool.execute('UPDATE users SET password_hash = ? WHERE id = ?', [hash, req.params.id]);
+    const targetId = parseInt(req.params.id);
+    const [targetUser] = await pool.execute('SELECT username FROM users WHERE id = ?', [targetId]);
+    await pool.execute('UPDATE users SET password_hash = ? WHERE id = ?', [hash, targetId]);
+    await auditLog(req.session.user, 'reset_password', 'user', targetId, targetUser[0]?.username || `id:${targetId}`);
     res.redirect('/admin?success=Mot de passe réinitialisé');
   } catch (err) {
     console.error('Password reset error:', err);

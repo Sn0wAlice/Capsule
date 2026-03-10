@@ -41,6 +41,7 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
       <button type="submit" class="btn btn-sm">Regénérer previews</button>
     </form>
     <% } %>
+    <button class="btn btn-sm" id="bulk-toggle">Sélectionner</button>
     <a href="/libraries/<%= library.id %>?view=folder" class="btn btn-sm <%= viewMode === 'folder' ? 'btn-active' : '' %>">Dossiers</a>
     <a href="/libraries/<%= library.id %>?view=flat" class="btn btn-sm <%= viewMode === 'flat' ? 'btn-active' : '' %>">Tout</a>
     <% if (viewMode === 'flat') { %>
@@ -66,6 +67,56 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
 <% if (error) { %>
   <div class="alert alert-error"><%= error %></div>
 <% } %>
+
+<!-- Scan progress bar -->
+<div class="scan-progress" id="scan-progress" style="display:none">
+  <div class="scan-progress-info">
+    <span id="scan-progress-text">Traitement...</span>
+    <span id="scan-progress-count"></span>
+  </div>
+  <div class="scan-progress-bar">
+    <div class="scan-progress-fill" id="scan-progress-fill"></div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const el = document.getElementById('scan-progress');
+  const text = document.getElementById('scan-progress-text');
+  const count = document.getElementById('scan-progress-count');
+  const fill = document.getElementById('scan-progress-fill');
+  let polling = null;
+
+  function check() {
+    fetch('/libraries/<%= library.id %>/progress')
+      .then(r => r.json())
+      .then(d => {
+        if (d.total === 0) { el.style.display = 'none'; return; }
+        const pct = d.total > 0 ? Math.round((d.done / d.total) * 100) : 0;
+        fill.style.width = pct + '%';
+        count.textContent = d.done + ' / ' + d.total;
+        if (d.active) {
+          el.style.display = '';
+          text.textContent = d.processing > 0 ? 'Traitement en cours...' : 'En attente...';
+        } else if (d.failed > 0) {
+          el.style.display = '';
+          text.textContent = 'Terminé (' + d.failed + ' erreur' + (d.failed > 1 ? 's' : '') + ')';
+          clearInterval(polling);
+        } else {
+          el.style.display = '';
+          text.textContent = 'Traitement terminé';
+          fill.style.width = '100%';
+          clearInterval(polling);
+          setTimeout(() => { el.style.display = 'none'; }, 5000);
+        }
+      })
+      .catch(() => {});
+  }
+
+  check();
+  polling = setInterval(check, 3000);
+})();
+</script>
 
 <% if (viewMode === 'folder') { %>
   <!-- Breadcrumb -->
@@ -179,12 +230,9 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
     <div class="video-grid" id="video-grid">
       <% for (const video of videos) { %>
         <a href="/videos/<%= video.id %>" class="video-card">
-          <div class="video-card-preview"<% if (video.sprite) { %> data-sprite="/videos/<%= video.id %>/sprite"<% } %>>
+          <div class="video-card-preview">
             <% if (video.thumb) { %>
-              <img src="/videos/<%= video.id %>/thumb" alt="" loading="lazy" decoding="async" class="thumb-static">
-            <% } %>
-            <% if (video.sprite) { %>
-              <img src="/videos/<%= video.id %>/sprite" alt="" loading="lazy" decoding="async" class="thumb-sprite">
+              <img src="/videos/<%= video.id %>/thumb" alt="" loading="lazy" decoding="async">
             <% } %>
             <% if (video.duration) { %>
               <span class="video-card-duration"><%= formatDuration(video.duration) %></span>
@@ -261,9 +309,8 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
             card.href = '/videos/' + v.id;
             card.className = 'video-card';
             card.innerHTML =
-              '<div class="video-card-preview"' + (v.sprite ? ' data-sprite="/videos/' + v.id + '/sprite"' : '') + '>' +
-              (v.thumb ? '<img src="/videos/' + v.id + '/thumb" alt="" loading="lazy" decoding="async" class="thumb-static">' : '') +
-              (v.sprite ? '<img src="/videos/' + v.id + '/sprite" alt="" loading="lazy" decoding="async" class="thumb-sprite">' : '') +
+              '<div class="video-card-preview">' +
+              (v.thumb ? '<img src="/videos/' + v.id + '/thumb" alt="" loading="lazy" decoding="async">' : '') +
               (v.duration ? '<span class="video-card-duration">' + formatDuration(v.duration) + '</span>' : '') +
               (v.view_count > 0 ? '<span class="video-card-views">' + v.view_count + ' vue' + (v.view_count > 1 ? 's' : '') + '</span>' : '') +
               '</div><div class="video-card-info">' +
@@ -286,5 +333,186 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
 })();
 </script>
 <% } %>
+
+<!-- Bulk action bar (hidden by default) -->
+<div class="bulk-bar" id="bulk-bar" style="display:none">
+  <div class="bulk-bar-info">
+    <span id="bulk-count">0</span> sélectionné(s)
+  </div>
+  <div class="bulk-bar-actions">
+    <button class="btn btn-sm" id="bulk-tag-btn">Tagger</button>
+    <button class="btn btn-sm" id="bulk-playlist-btn">Ajouter à playlist</button>
+    <% if (['owner','admin','write'].includes(permission)) { %>
+      <button class="btn btn-sm btn-danger" id="bulk-delete-btn">Supprimer</button>
+    <% } %>
+    <button class="btn btn-sm" id="bulk-cancel">Annuler</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  const toggleBtn = document.getElementById('bulk-toggle');
+  const bar = document.getElementById('bulk-bar');
+  const countEl = document.getElementById('bulk-count');
+  let bulkMode = false;
+  let selected = new Set();
+
+  function updateCount() {
+    countEl.textContent = selected.size;
+    bar.style.display = selected.size > 0 ? '' : 'none';
+  }
+
+  function enterBulkMode() {
+    bulkMode = true;
+    document.body.classList.add('bulk-mode');
+    toggleBtn.textContent = 'Annuler sélection';
+    // Add checkboxes to all video cards
+    document.querySelectorAll('.video-card:not(.folder-card)').forEach(card => {
+      const link = card.getAttribute('href');
+      if (!link) return;
+      const id = link.split('/videos/')[1];
+      if (!id) return;
+      card.dataset.videoId = id;
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'video-card-checkbox';
+      cb.dataset.id = id;
+      card.prepend(cb);
+    });
+    // Also handle table rows
+    document.querySelectorAll('.video-table-link').forEach(link => {
+      const href = link.getAttribute('href');
+      if (!href) return;
+      const id = href.split('/videos/')[1];
+      if (!id) return;
+      const tr = link.closest('tr');
+      if (tr && !tr.querySelector('.video-card-checkbox')) {
+        tr.dataset.videoId = id;
+        const td = document.createElement('td');
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'video-card-checkbox';
+        cb.dataset.id = id;
+        td.appendChild(cb);
+        tr.prepend(td);
+      }
+    });
+    // Add header cell for table
+    const thead = document.querySelector('.video-table thead tr');
+    if (thead && !thead.querySelector('.bulk-th')) {
+      const th = document.createElement('th');
+      th.className = 'bulk-th';
+      th.style.width = '30px';
+      thead.prepend(th);
+    }
+  }
+
+  function exitBulkMode() {
+    bulkMode = false;
+    selected.clear();
+    document.body.classList.remove('bulk-mode');
+    toggleBtn.textContent = 'Sélectionner';
+    document.querySelectorAll('.video-card-checkbox').forEach(cb => cb.remove());
+    document.querySelectorAll('.bulk-th').forEach(el => el.remove());
+    // Remove extra td from table rows
+    document.querySelectorAll('.video-table tbody tr').forEach(tr => {
+      const first = tr.firstElementChild;
+      if (first && first.querySelector('.video-card-checkbox')) first.remove();
+    });
+    updateCount();
+  }
+
+  toggleBtn.addEventListener('click', () => {
+    if (bulkMode) exitBulkMode(); else enterBulkMode();
+  });
+
+  document.getElementById('bulk-cancel').addEventListener('click', exitBulkMode);
+
+  // Intercept clicks in bulk mode
+  document.addEventListener('click', (e) => {
+    if (!bulkMode) return;
+    const card = e.target.closest('.video-card:not(.folder-card)');
+    const row = e.target.closest('.video-table tbody tr');
+    const target = card || row;
+    if (!target) return;
+
+    const id = target.dataset.videoId;
+    if (!id) return;
+
+    // Don't navigate
+    if (card) e.preventDefault();
+
+    const cb = target.querySelector('.video-card-checkbox');
+    if (selected.has(id)) {
+      selected.delete(id);
+      if (cb) cb.checked = false;
+    } else {
+      selected.add(id);
+      if (cb) cb.checked = true;
+    }
+    updateCount();
+  }, true);
+
+  // Bulk tag
+  document.getElementById('bulk-tag-btn').addEventListener('click', async () => {
+    if (selected.size === 0) return;
+    const tagName = prompt('Nom du tag :');
+    if (!tagName) return;
+    try {
+      const resp = await fetch('/videos/bulk/tag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoIds: Array.from(selected), tagName })
+      });
+      const data = await resp.json();
+      if (data.ok) { alert(data.count + ' vidéo(s) taguée(s)'); exitBulkMode(); }
+      else alert('Erreur: ' + (data.error || 'inconnue'));
+    } catch { alert('Erreur réseau'); }
+  });
+
+  // Bulk playlist
+  document.getElementById('bulk-playlist-btn').addEventListener('click', async () => {
+    if (selected.size === 0) return;
+    // Fetch playlists
+    try {
+      const resp = await fetch('/playlists/api/list');
+      const playlists = await resp.json();
+      if (playlists.length === 0) { alert('Aucune playlist. Créez-en une d\'abord.'); return; }
+      const choices = playlists.map((p, i) => (i + 1) + '. ' + p.name).join('\n');
+      const choice = prompt('Choisir une playlist :\n' + choices);
+      if (!choice) return;
+      const idx = parseInt(choice) - 1;
+      if (isNaN(idx) || idx < 0 || idx >= playlists.length) { alert('Choix invalide'); return; }
+      const resp2 = await fetch('/videos/bulk/playlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoIds: Array.from(selected), playlistId: playlists[idx].id })
+      });
+      const data = await resp2.json();
+      if (data.ok) { alert(data.count + ' vidéo(s) ajoutée(s)'); exitBulkMode(); }
+      else alert('Erreur: ' + (data.error || 'inconnue'));
+    } catch { alert('Erreur réseau'); }
+  });
+
+  // Bulk delete
+  const delBtn = document.getElementById('bulk-delete-btn');
+  if (delBtn) {
+    delBtn.addEventListener('click', async () => {
+      if (selected.size === 0) return;
+      if (!confirm('Supprimer ' + selected.size + ' vidéo(s) de la base ? (les fichiers ne sont pas supprimés)')) return;
+      try {
+        const resp = await fetch('/videos/bulk/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoIds: Array.from(selected) })
+        });
+        const data = await resp.json();
+        if (data.ok) { location.reload(); }
+        else alert('Erreur: ' + (data.error || 'inconnue'));
+      } catch { alert('Erreur réseau'); }
+    });
+  }
+})();
+</script>
 
 <%- include('partials/footer') %>

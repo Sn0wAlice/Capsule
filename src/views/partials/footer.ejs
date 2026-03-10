@@ -1,6 +1,20 @@
   </main>
   <script src="/js/app.js"></script>
   <script>
+    // Auto-inject CSRF hidden field in all POST forms
+    if (window._csrfToken) {
+      document.querySelectorAll('form[method="POST"], form[method="post"]').forEach(function(f) {
+        if (!f.querySelector('input[name="_csrf"]')) {
+          var input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = '_csrf';
+          input.value = window._csrfToken;
+          f.appendChild(input);
+        }
+      });
+    }
+  </script>
+  <script>
     // Auto-dismiss success alerts after 4s
     document.querySelectorAll('.alert-success').forEach(el => {
       setTimeout(() => {

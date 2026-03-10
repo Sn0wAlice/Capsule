@@ -7,8 +7,9 @@ const pool = mysql.createPool({
   password: process.env.DB_PASSWORD || 'capsule_secret',
   database: process.env.DB_NAME || 'capsule',
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit: parseInt(process.env.DB_POOL_SIZE || '30', 10),
   queueLimit: 0,
+  connectTimeout: 10000,
 });
 
 module.exports = pool;

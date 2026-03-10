@@ -24,6 +24,19 @@ router.get('/', async (req, res) => {
   }
 });
 
+// API: list playlists as JSON (for bulk operations)
+router.get('/api/list', async (req, res) => {
+  try {
+    const [playlists] = await pool.execute(
+      'SELECT id, name FROM playlists WHERE user_id = ? ORDER BY name',
+      [req.session.user.id]
+    );
+    res.json(playlists);
+  } catch (err) {
+    res.json([]);
+  }
+});
+
 // Create playlist
 router.post('/create', async (req, res) => {
   const name = (req.body.name || '').trim();

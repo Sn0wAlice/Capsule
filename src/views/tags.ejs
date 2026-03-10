@@ -1,0 +1,81 @@
+<%- include('partials/header') %>
+
+<div class="page-header">
+  <h1>Mes tags (<%= tags.length %>)</h1>
+</div>
+
+<% if (tags.length === 0) { %>
+  <div class="empty-state">
+    <p>Aucun tag. Ajoutez des tags depuis la page d'une vidéo.</p>
+  </div>
+<% } else { %>
+  <div class="tags-manage-list">
+    <% for (const tag of tags) { %>
+      <div class="tags-manage-row" data-id="<%= tag.id %>">
+        <span class="tag tag-<%= tag.color %> tag-manage-preview"><%= tag.name %></span>
+        <span class="text-muted"><%= tag.video_count %> vidéo(s)</span>
+        <div class="tags-manage-actions">
+          <select class="autoplay-select tag-color-select" data-id="<%= tag.id %>">
+            <% const colors = ['gray','red','orange','yellow','green','blue','purple','pink']; %>
+            <% for (const c of colors) { %>
+              <option value="<%= c %>" <%= tag.color === c ? 'selected' : '' %>><%= c %></option>
+            <% } %>
+          </select>
+          <button class="btn btn-sm tag-rename-btn" data-id="<%= tag.id %>" data-name="<%= tag.name %>">Renommer</button>
+          <button class="btn btn-sm btn-danger tag-delete-btn" data-id="<%= tag.id %>" data-name="<%= tag.name %>" data-count="<%= tag.video_count %>">Supprimer</button>
+        </div>
+      </div>
+    <% } %>
+  </div>
+<% } %>
+
+<script>
+  // Rename
+  document.querySelectorAll('.tag-rename-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const current = btn.dataset.name;
+      const newName = prompt('Nouveau nom pour "' + current + '" :', current);
+      if (!newName || newName.trim() === current) return;
+      fetch('/tags/' + id + '/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName.trim() }),
+      }).then(r => r.json()).then(data => {
+        if (data.error) return alert(data.error);
+        location.reload();
+      }).catch(() => {});
+    });
+  });
+
+  // Color
+  document.querySelectorAll('.tag-color-select').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const id = sel.dataset.id;
+      fetch('/tags/' + id + '/color', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ color: sel.value }),
+      }).then(r => r.json()).then(() => {
+        location.reload();
+      }).catch(() => {});
+    });
+  });
+
+  // Delete
+  document.querySelectorAll('.tag-delete-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const name = btn.dataset.name;
+      const count = btn.dataset.count;
+      if (!confirm('Supprimer le tag "' + name + '" ?\nIl sera retiré de ' + count + ' vidéo(s).')) return;
+      fetch('/tags/' + id + '/delete', {
+        method: 'POST',
+      }).then(r => r.json()).then(data => {
+        if (data.ok) btn.closest('.tags-manage-row').remove();
+      }).catch(() => {});
+    });
+  });
+</script>
+
+<%- include('partials/footer') %>
