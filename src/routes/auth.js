@@ -21,6 +21,10 @@ router.post('/login', async (req, res) => {
     if (!match) {
       return res.render('login', { error: 'Identifiants invalides', registerEnabled: !isRegisterDisabled() });
     }
+    if (user.is_active === 0) {
+      return res.render('login', { error: 'Ce compte est désactivé. Contactez un administrateur.', registerEnabled: !isRegisterDisabled() });
+    }
+    await pool.execute('UPDATE users SET last_login_at = NOW() WHERE id = ?', [user.id]);
     req.session.user = { id: user.id, username: user.username, role: user.role || 'user', theme: user.theme || 'dark', default_view: user.default_view || 'grid' };
     res.redirect('/dashboard');
   } catch (err) {

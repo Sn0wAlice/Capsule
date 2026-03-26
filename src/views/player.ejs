@@ -48,10 +48,10 @@ function formatBitrate(bps) {
         <h1 class="player-title" id="video-title"<% if (['owner','admin','write'].includes(permission)) { %> title="Double-cliquer pour renommer"<% } %>><%= video.title || video.filename %></h1>
         <div class="player-actions">
           <button class="btn btn-sm btn-fav<%= isFavorite ? ' active' : '' %>" id="btn-fav" title="Favoris (F)">
-            <span id="fav-icon"><%= isFavorite ? '&#9733;' : '&#9734;' %></span>
+            <span id="fav-icon"><%- isFavorite ? '&#9733;' : '&#9734;' %></span>
           </button>
           <button class="btn btn-sm btn-wl<%= isWatchlisted ? ' active' : '' %>" id="btn-wl" title="A regarder (W)">
-            <span id="wl-icon"><%= isWatchlisted ? '&#10003;' : '&#9201;' %></span>
+            <span id="wl-icon"><%- isWatchlisted ? '&#10003;' : '&#9201;' %></span>
           </button>
           <% if (playlists.length > 0) { %>
           <select id="add-to-playlist" class="autoplay-select" title="Ajouter à une playlist">
@@ -138,6 +138,24 @@ function formatBitrate(bps) {
           <span class="info-value mono"><%= video.audio_codec %></span>
         </div>
         <% } %>
+        <%
+          let audioTracks = null;
+          try {
+            audioTracks = video.audio_tracks ? (typeof video.audio_tracks === 'string' ? JSON.parse(video.audio_tracks) : video.audio_tracks) : null;
+          } catch(e) {}
+        %>
+        <% if (audioTracks && audioTracks.length > 1) { %>
+        <div class="info-row">
+          <span class="info-label">Pistes audio</span>
+          <span class="info-value">
+            <% for (const track of audioTracks) { %>
+              <span class="badge badge-info" style="margin: 1px 2px; display: inline-block;">
+                <%= track.language || ('Piste ' + track.index) %><% if (track.title) { %> — <%= track.title %><% } %> (<%= track.codec %>)
+              </span>
+            <% } %>
+          </span>
+        </div>
+        <% } %>
         <% if (video.bitrate) { %>
         <div class="info-row">
           <span class="info-label">Débit</span>
@@ -161,6 +179,7 @@ function formatBitrate(bps) {
         <div class="shortcut-row"><kbd>F</kbd> <span>Favoris</span></div>
         <div class="shortcut-row"><kbd>W</kbd> <span>A regarder</span></div>
         <div class="shortcut-row"><kbd>N</kbd> <span>Vidéo suivante</span></div>
+        <div class="shortcut-row"><kbd>L</kbd> <span>Plein écran</span></div>
         <div class="shortcut-row"><kbd>M</kbd> <span>Mode auto-play</span></div>
         <% if (['owner','admin','write'].includes(permission)) { %>
         <div class="shortcut-row"><kbd>T</kbd> <span>Ajouter un tag</span></div>
@@ -207,6 +226,9 @@ function formatBitrate(bps) {
     localStorage.setItem('capsule_autoplay', autoplaySelect.value);
   });
 
+  // Restore saved playback rate
+  const savedRate = parseFloat(localStorage.getItem('capsule_playback_rate')) || 1;
+
   // Init ArtPlayer
   const art = new Artplayer({
     container: '#artplayer-app',
@@ -231,7 +253,7 @@ function formatBitrate(bps) {
     controls: [
       {
         position: 'right',
-        html: '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 5v14l-11-7z"/><rect x="18" y="5" width="2" height="14" rx="1"/></svg>',
+        html: '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/><rect x="4" y="5" width="2" height="14" rx="1"/></svg>',
         tooltip: 'Vidéo suivante (N)',
         click: function () {
           goNext();
@@ -252,10 +274,33 @@ function formatBitrate(bps) {
     }
   });
 
-  // Resume playback
+  // Resume playback + auto-start if navigated via autoplay
+  const urlParams = new URLSearchParams(window.location.search);
+  const shouldAutoplay = urlParams.get('autoplay') === '1';
+
   art.on('ready', () => {
+    // Restore playback rate
+    if (savedRate !== 1) art.playbackRate = savedRate;
     if (SAVED_PROGRESS > 2) {
       art.currentTime = SAVED_PROGRESS;
+    }
+    if (shouldAutoplay) {
+      // Wait for the seek to settle before playing
+      const tryPlay = () => {
+        const p = art.play();
+        if (p && typeof p.catch === 'function') {
+          p.catch(() => {
+            // Browser blocked autoplay — try muted
+            art.muted = true;
+            art.play().catch(() => {});
+          });
+        }
+      };
+      if (SAVED_PROGRESS > 2) {
+        art.once('video:canplay', tryPlay);
+      } else {
+        tryPlay();
+      }
     }
   });
 
@@ -285,11 +330,10 @@ function formatBitrate(bps) {
   art.on('video:pause', saveProgress);
   window.addEventListener('beforeunload', saveProgress);
 
-  // Auto-start if navigated via autoplay
-  const urlParams = new URLSearchParams(window.location.search);
-  if (urlParams.get('autoplay') === '1') {
-    art.on('ready', () => { art.play(); });
-  }
+  // Persist playback rate changes
+  art.on('video:ratechange', () => {
+    localStorage.setItem('capsule_playback_rate', art.playbackRate);
+  });
 
   // Auto-play next on video end
   art.on('video:ended', () => {
@@ -321,7 +365,7 @@ function formatBitrate(bps) {
     fetch('/videos/' + VIDEO_ID + '/favorite', { method: 'POST' })
       .then(r => r.json())
       .then(data => {
-        favIcon.textContent = data.favorited ? '\u2605' : '\u2606';
+        favIcon.innerHTML = data.favorited ? '&#9733;' : '&#9734;';
         btnFav.classList.toggle('active', data.favorited);
       })
       .catch(() => {});
@@ -335,7 +379,7 @@ function formatBitrate(bps) {
     fetch('/videos/' + VIDEO_ID + '/watchlist', { method: 'POST' })
       .then(r => r.json())
       .then(data => {
-        wlIcon.textContent = data.watchlisted ? '\u2713' : '\u23F1';
+        wlIcon.innerHTML = data.watchlisted ? '&#10003;' : '&#9201;';
         btnWl.classList.toggle('active', data.watchlisted);
       })
       .catch(() => {});
@@ -449,6 +493,7 @@ function formatBitrate(bps) {
       case 'w': e.preventDefault(); toggleWl(); break;
       case 'n': e.preventDefault(); goNext(); break;
       case 'm': e.preventDefault(); cycleAutoplay(); break;
+      case 'l': e.preventDefault(); art.fullscreen = !art.fullscreen; break;
       case 't': if (CAN_WRITE && tagInput) { e.preventDefault(); tagInput.focus(); } break;
     }
   });

@@ -19,18 +19,73 @@ function formatDuration(seconds) {
 }
 %>
 
+<%
+function formatDurationLong(seconds) {
+  if (!seconds) return '0h';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return h + 'h ' + String(m).padStart(2, '0') + 'm';
+  return m + 'min';
+}
+%>
+
 <div class="page-header">
   <h1>Bibliothèques</h1>
 </div>
+
+<% if (stats.totalVideos > 0) { %>
+<div class="dashboard-stats">
+  <div class="stat-card">
+    <span class="stat-value"><%= stats.totalVideos %></span>
+    <span class="stat-label">vidéos</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-value"><%= formatSize(stats.totalSize) %></span>
+    <span class="stat-label">espace total</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-value"><%= formatDurationLong(stats.totalDuration) %></span>
+    <span class="stat-label">durée totale</span>
+  </div>
+</div>
+<% } %>
 
 <% if (typeof error !== 'undefined' && error) { %>
   <div class="alert alert-error"><%= error %></div>
 <% } %>
 
+<!-- Continue watching -->
+<% if (continueWatching.length > 0) { %>
+  <div class="dashboard-section">
+    <h2 class="section-title">Continuer à regarder</h2>
+    <div class="video-grid">
+      <% for (const v of continueWatching) { %>
+        <a href="/videos/<%= v.id %>" class="video-card">
+          <div class="video-card-preview">
+            <% if (v.thumb) { %>
+              <img src="/videos/<%= v.id %>/thumb" alt="" loading="lazy" decoding="async">
+            <% } %>
+            <% if (v.duration) { %>
+              <span class="video-card-duration"><%= formatDuration(v.duration) %></span>
+            <% } %>
+            <div class="video-progress-bar">
+              <div class="video-progress-fill" style="width: <%= Math.round((v.progress / v.duration) * 100) %>%"></div>
+            </div>
+          </div>
+          <div class="video-card-info">
+            <span class="video-card-title"><%= v.title || v.filename %></span>
+            <span class="video-card-meta"><%= formatSize(v.size) %></span>
+          </div>
+        </a>
+      <% } %>
+    </div>
+  </div>
+<% } %>
+
 <!-- Recent history -->
 <% if (history.length > 0) { %>
   <div class="dashboard-section">
-    <h2 class="section-title">Reprendre la lecture</h2>
+    <h2 class="section-title">Historique récent</h2>
     <div class="video-grid">
       <% for (const v of history) { %>
         <a href="/videos/<%= v.id %>" class="video-card">
@@ -129,10 +184,15 @@ function formatDuration(seconds) {
     <div class="libraries-grid">
       <% for (const lib of libraries) { %>
         <div class="card library-card">
+          <% if (lib.cover_vid) { %>
+            <a href="/libraries/<%= lib.id %>" class="library-cover">
+              <img src="/videos/<%= lib.cover_vid %>/thumb" alt="" loading="lazy" decoding="async">
+            </a>
+          <% } %>
           <div class="library-info">
             <h3><a href="/libraries/<%= lib.id %>"><%= lib.name %></a></h3>
             <p class="library-path"><%= lib.path %></p>
-            <p class="library-count"><%= lib.video_count || 0 %> vidéo(s)</p>
+            <p class="library-count"><%= lib.video_count || 0 %> vidéo(s) <% if (!lib.video_count) { %><span class="badge badge-info">Pas encore scanné</span><% } %></p>
           </div>
           <div class="library-actions">
             <a href="/libraries/<%= lib.id %>" class="btn btn-sm">Parcourir</a>
@@ -158,6 +218,11 @@ function formatDuration(seconds) {
     <div class="libraries-grid">
       <% for (const lib of sharedLibraries) { %>
         <div class="card library-card">
+          <% if (lib.cover_vid) { %>
+            <a href="/libraries/<%= lib.id %>" class="library-cover">
+              <img src="/videos/<%= lib.cover_vid %>/thumb" alt="" loading="lazy" decoding="async">
+            </a>
+          <% } %>
           <div class="library-info">
             <h3><a href="/libraries/<%= lib.id %>"><%= lib.name %></a></h3>
             <p class="library-path"><%= lib.owner_name %> &mdash; <span class="badge <%= lib.permission === 'write' ? 'badge-success' : 'badge-info' %>"><%= lib.permission === 'write' ? 'Lecture/Écriture' : 'Lecture' %></span></p>

@@ -13,10 +13,13 @@ function formatSize(bytes) {
 
 <div class="page-header">
   <div>
-    <h1><%= playlist.name %></h1>
+    <h1><%= playlist.name %> <% if (playlist.is_smart) { %><span class="badge badge-accent">Smart</span><% } %></h1>
     <p class="text-muted"><%= items.length %> vidéo(s)</p>
   </div>
   <div class="page-actions">
+    <% if (items.length > 0) { %>
+      <a href="/videos/<%= items[0].id %>?autoplay=1&playlist=<%= playlist.id %>" class="btn btn-sm btn-primary">Lire tout</a>
+    <% } %>
     <a href="/playlists" class="btn btn-sm">← Playlists</a>
     <form method="POST" action="/playlists/<%= playlist.id %>/delete" style="display:inline"
           onsubmit="return confirm('Supprimer cette playlist ?')">
@@ -33,7 +36,7 @@ function formatSize(bytes) {
   <div class="playlist-items" id="playlist-items">
     <% for (let i = 0; i < items.length; i++) { const v = items[i]; %>
       <div class="playlist-item" data-video-id="<%= v.id %>" data-position="<%= v.position %>">
-        <span class="playlist-handle" title="Glisser pour réordonner">⠿</span>
+        <% if (!playlist.is_smart) { %><span class="playlist-handle" title="Glisser pour réordonner">⠿</span><% } %>
         <span class="playlist-index"><%= i + 1 %></span>
         <a href="/videos/<%= v.id %>" class="playlist-item-link">
           <div class="playlist-item-thumb">
@@ -46,8 +49,10 @@ function formatSize(bytes) {
             <span class="playlist-item-meta"><%= formatSize(v.size) %></span>
           </div>
         </a>
+        <% if (!playlist.is_smart) { %>
         <button class="btn btn-sm btn-danger playlist-remove" data-video-id="<%= v.id %>"
                 title="Retirer de la playlist">&times;</button>
+        <% } %>
       </div>
     <% } %>
   </div>
@@ -67,13 +72,77 @@ function formatSize(bytes) {
         body: JSON.stringify({ video_id: videoId }),
       }).then(r => r.json()).then(() => {
         btn.closest('.playlist-item').remove();
-        // Update indices
-        document.querySelectorAll('.playlist-index').forEach((el, i) => {
-          el.textContent = i + 1;
-        });
+        updateIndices();
       }).catch(() => {});
     });
   });
+
+  // Drag & Drop reordering
+  const container = document.getElementById('playlist-items');
+  if (container) {
+    let draggedItem = null;
+
+    container.addEventListener('dragstart', (e) => {
+      const item = e.target.closest('.playlist-item');
+      if (!item) return;
+      draggedItem = item;
+      item.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    container.addEventListener('dragend', (e) => {
+      if (draggedItem) {
+        draggedItem.classList.remove('dragging');
+        draggedItem = null;
+      }
+      document.querySelectorAll('.playlist-item.drag-over').forEach(el => el.classList.remove('drag-over'));
+    });
+
+    container.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const target = e.target.closest('.playlist-item');
+      if (!target || target === draggedItem) return;
+      document.querySelectorAll('.playlist-item.drag-over').forEach(el => el.classList.remove('drag-over'));
+      target.classList.add('drag-over');
+
+      const rect = target.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      if (e.clientY < midY) {
+        container.insertBefore(draggedItem, target);
+      } else {
+        container.insertBefore(draggedItem, target.nextSibling);
+      }
+    });
+
+    container.addEventListener('drop', (e) => {
+      e.preventDefault();
+      document.querySelectorAll('.playlist-item.drag-over').forEach(el => el.classList.remove('drag-over'));
+      updateIndices();
+      saveOrder();
+    });
+
+    // Make items draggable via handle
+    container.querySelectorAll('.playlist-item').forEach(item => {
+      item.setAttribute('draggable', 'true');
+    });
+  }
+
+  function updateIndices() {
+    document.querySelectorAll('.playlist-index').forEach((el, i) => {
+      el.textContent = i + 1;
+    });
+  }
+
+  function saveOrder() {
+    const items = document.querySelectorAll('.playlist-item');
+    const order = Array.from(items).map(item => item.dataset.videoId);
+    fetch('/playlists/' + PLAYLIST_ID + '/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order }),
+    }).catch(() => {});
+  }
 </script>
 
 <%- include('partials/footer') %>

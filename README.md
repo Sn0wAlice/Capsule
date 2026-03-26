@@ -4,18 +4,49 @@ Application web self-hosted de gestion et lecture de vidéos. Organisez vos bibl
 
 ## Fonctionnalités
 
-- **Bibliothèques** — Ajoutez des dossiers locaux comme bibliothèques, scannez automatiquement les fichiers vidéo
-- **Lecteur intégré** — Lecteur vidéo (ArtPlayer) avec reprise de lecture, auto-play, raccourcis clavier
-- **Navigation** — Vue dossiers ou liste plate, tri par nom/date/taille, grille ou tableau, recherche globale
-- **Thumbnails & sprites** — Génération automatique de miniatures et sprites de preview au survol (ffmpeg)
-- **Tags & playlists** — Organisez vos vidéos avec des tags colorés et des playlists ordonnées
-- **Favoris & historique** — Suivi de progression, historique de lecture, favoris
-- **Détection de doublons** — Identifie les fichiers identiques à travers les bibliothèques
-- **Multi-utilisateur** — Rôles admin/user, partage de bibliothèques avec permissions lecture/écriture
+### Bibliothèques
+- Ajoutez des dossiers locaux, scan automatique des fichiers vidéo
+- **Couvertures** — Thumbnail de couverture affichée sur le dashboard
+- **Navigation dossier** avec compteur de vidéos par dossier
+- **Vue liste/grille** avec tri par nom, date, taille ou nombre de vues
+- **Filtre "non vues"** — Affiche uniquement les vidéos jamais regardées
+- **File watcher** — Détection automatique des nouveaux fichiers
+- **Détection de doublons** à travers les bibliothèques
+
+### Lecteur vidéo
+- Lecteur intégré (ArtPlayer) avec reprise de lecture automatique
+- **Auto-play** — Enchaînement aléatoire ou alphabétique
+- **Vitesse de lecture persistante** — Sauvegardée entre les sessions
+- **Pistes audio multiples** — Affichage des pistes disponibles (langue, codec)
+- Raccourcis clavier complets
+
+### Organisation
+- **Tags colorés** — 9 couleurs, gestion centralisée, recherche par tag
+- **Playlists** — Création, réordonnancement drag & drop
+- **Smart playlists** — Playlists auto-générées par critères (tag, durée, résolution, bibliothèque)
+- **Lecture en continu** — Bouton "Lire tout" sur les playlists
+- **Favoris, watchlist & historique** — Suivi de progression avec section "Continuer à regarder"
+
+### Dashboard
+- **Statistiques** — Total vidéos, espace disque, durée totale
+- **Continuer à regarder** — Vidéos en cours avec barre de progression
+- Sections favoris, watchlist, historique récent
+
+### Multi-utilisateur
+- Rôles admin/user, partage de bibliothèques (lecture / lecture+écriture)
+- **Création de comptes** par l'admin
+- **Désactivation de comptes** sans suppression
+- **Dernière connexion** visible dans l'admin
+- **Déconnexion forcée** d'un utilisateur
+- **Espace disque par bibliothèque** dans le panel admin
+- Journal d'audit des actions admin
+
+### Technique
+- **Thumbnails** — Génération automatique via ffmpeg
+- **Worker séparé** — Traitement ffmpeg dans un processus dédié
 - **Thèmes** — Mode sombre et clair
-- **File watcher** — Détection automatique des nouveaux fichiers ajoutés aux bibliothèques
-- **Worker séparé** — Traitement ffmpeg (thumbnails, sprites, métadonnées) dans un processus dédié
-- **Docker ready** — Image Docker multi-arch (amd64/arm64), CI/CD GitHub Actions
+- **Docker ready** — Image multi-arch (amd64/arm64), CI/CD GitHub Actions
+- Sécurité : CSRF, rate limiting, protection path traversal
 
 ## Stack
 
@@ -131,10 +162,16 @@ L'image est disponible sur `ghcr.io/sn0walice/capsule`.
 
 Le panneau admin (`/admin`) permet de :
 
-- Voir la liste des utilisateurs
+- Créer des comptes utilisateur
+- Voir la liste des utilisateurs avec dernière connexion
 - Changer les rôles (admin/user)
+- Activer/désactiver des comptes
 - Réinitialiser les mots de passe
+- Forcer la déconnexion d'un utilisateur
 - Supprimer des comptes
+- Voir l'espace disque par bibliothèque
+- Surveiller la file d'attente des jobs ffmpeg
+- Consulter le journal d'audit
 
 ## Partage de bibliothèques
 
@@ -148,7 +185,9 @@ Chaque utilisateur peut partager ses bibliothèques avec d'autres :
 | Touche | Action |
 |---|---|
 | `F` | Ajouter/retirer des favoris |
+| `W` | Ajouter/retirer de la watchlist |
 | `N` | Vidéo suivante |
+| `L` | Plein écran |
 | `M` | Changer le mode auto-play |
 | `T` | Ajouter un tag |
 

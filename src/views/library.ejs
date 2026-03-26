@@ -45,6 +45,10 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
     <a href="/libraries/<%= library.id %>?view=folder" class="btn btn-sm <%= viewMode === 'folder' ? 'btn-active' : '' %>">Dossiers</a>
     <a href="/libraries/<%= library.id %>?view=flat" class="btn btn-sm <%= viewMode === 'flat' ? 'btn-active' : '' %>">Tout</a>
     <% if (viewMode === 'flat') { %>
+      <a href="/libraries/<%= library.id %>?view=flat&sort=<%= sort %>&order=<%= order %>&display=<%= displayMode %>&unwatched=<%= filterUnwatched ? '0' : '1' %>"
+         class="btn btn-sm <%= filterUnwatched ? 'btn-active' : '' %>">Non vues</a>
+    <% } %>
+    <% if (viewMode === 'flat') { %>
     <div class="view-toggles">
       <a href="/libraries/<%= library.id %>?view=flat&sort=<%= sort %>&order=<%= order %>&display=grid"
          class="view-toggle-btn <%= displayMode === 'grid' ? 'active' : '' %>" title="Grille">
@@ -147,6 +151,7 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
           </div>
           <div class="video-card-info">
             <span class="video-card-title"><%= folder %></span>
+            <span class="video-card-meta"><%= folderCounts[folder] || 0 %> vidéo(s)</span>
           </div>
         </a>
       <% } %>
@@ -167,9 +172,13 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
        class="<%= sort === 'date' ? 'active' : '' %>">
       Date <%= sort === 'date' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
     </a>
-    <a href="/libraries/<%= library.id %>?view=flat&sort=size&order=<%= sort === 'size' && order === 'desc' ? 'asc' : 'desc' %>&display=grid"
+    <a href="/libraries/<%= library.id %>?view=flat&sort=size&order=<%= sort === 'size' && order === 'desc' ? 'asc' : 'desc' %>&display=grid<%= filterUnwatched ? '&unwatched=1' : '' %>"
        class="<%= sort === 'size' ? 'active' : '' %>">
-      Taille <%= sort === 'size' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
+      Taille <%- sort === 'size' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
+    </a>
+    <a href="/libraries/<%= library.id %>?view=flat&sort=views&order=<%= sort === 'views' && order === 'desc' ? 'asc' : 'desc' %>&display=grid<%= filterUnwatched ? '&unwatched=1' : '' %>"
+       class="<%= sort === 'views' ? 'active' : '' %>">
+      Vues <%- sort === 'views' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
     </a>
   </div>
   <% } %>
@@ -195,7 +204,12 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
             </a>
           </th>
           <th>Durée</th>
-          <th>Vues</th>
+          <th class="<%= sort === 'views' ? 'sorted' : '' %>">
+            <a href="/libraries/<%= library.id %>?view=flat&sort=views&order=<%= sort === 'views' && order === 'desc' ? 'asc' : 'desc' %>&display=list<%= filterUnwatched ? '&unwatched=1' : '' %>"
+               style="color:inherit;text-decoration:none">
+              Vues <%- sort === 'views' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
+            </a>
+          </th>
           <th class="<%= sort === 'date' ? 'sorted' : '' %>">
             <a href="/libraries/<%= library.id %>?view=flat&sort=date&order=<%= sort === 'date' && order === 'desc' ? 'asc' : 'desc' %>&display=list"
                style="color:inherit;text-decoration:none">

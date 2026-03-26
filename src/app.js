@@ -155,9 +155,13 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     const userId = req.session.user.id;
     const userRole = req.session.user.role;
 
-    // Owned libraries
+    // Owned libraries (with cover thumbnail)
     const [libraries] = await pool.execute(
-      `SELECT l.*, COUNT(v.id) as video_count
+      `SELECT l.*, COUNT(v.id) as video_count,
+              COALESCE(l.cover_video_id,
+                (SELECT v2.id FROM videos v2 INNER JOIN thumbnails t2 ON t2.video_id = v2.id
+                 WHERE v2.library_id = l.id ORDER BY v2.id ASC LIMIT 1)
+              ) as cover_vid
        FROM libraries l
        LEFT JOIN videos v ON v.library_id = l.id
        WHERE l.user_id = ?
@@ -166,9 +170,13 @@ app.get('/dashboard', requireAuth, async (req, res) => {
       [userId]
     );
 
-    // Shared libraries
+    // Shared libraries (with cover thumbnail)
     const [sharedLibraries] = await pool.execute(
-      `SELECT l.*, ls.permission, u.username as owner_name, COUNT(v.id) as video_count
+      `SELECT l.*, ls.permission, u.username as owner_name, COUNT(v.id) as video_count,
+              COALESCE(l.cover_video_id,
+                (SELECT v2.id FROM videos v2 INNER JOIN thumbnails t2 ON t2.video_id = v2.id
+                 WHERE v2.library_id = l.id ORDER BY v2.id ASC LIMIT 1)
+              ) as cover_vid
        FROM library_shares ls
        JOIN libraries l ON l.id = ls.library_id
        JOIN users u ON u.id = l.user_id
@@ -181,6 +189,36 @@ app.get('/dashboard', requireAuth, async (req, res) => {
 
     // All accessible library IDs (for history/favorites)
     const libIds = await getAccessibleLibraryIds(userId, userRole);
+
+    // Dashboard stats
+    let stats = { totalVideos: 0, totalSize: 0, totalDuration: 0 };
+    if (libIds.length > 0) {
+      const [statRows] = await pool.query(
+        `SELECT COUNT(*) as totalVideos, COALESCE(SUM(v.size), 0) as totalSize, COALESCE(SUM(v.duration), 0) as totalDuration
+         FROM videos v WHERE v.library_id IN (?)`,
+        [libIds]
+      );
+      stats = statRows[0];
+    }
+
+    // Continue watching (in progress: between 5% and 95%)
+    let continueWatching = [];
+    if (libIds.length > 0) {
+      [continueWatching] = await pool.query(
+        `SELECT v.id, v.filename, v.title, v.size, v.duration, t.filename as thumb, wh.progress, wh.watched_at
+         FROM watch_history wh
+         JOIN videos v ON v.id = wh.video_id
+         JOIN libraries l ON l.id = v.library_id
+         LEFT JOIN thumbnails t ON t.video_id = v.id
+         WHERE wh.user_id = ? AND l.id IN (?)
+           AND wh.progress > 0 AND v.duration IS NOT NULL AND v.duration > 0
+           AND (wh.progress / v.duration) > 0.05
+           AND (wh.progress / v.duration) < 0.95
+         ORDER BY wh.watched_at DESC
+         LIMIT 12`,
+        [userId, libIds]
+      );
+    }
 
     // Recent watch history
     let history = [];
@@ -234,14 +272,16 @@ app.get('/dashboard', requireAuth, async (req, res) => {
       pageTitle: 'Bibliothèques',
       libraries,
       sharedLibraries,
+      continueWatching,
       history,
       favorites,
       watchlist,
+      stats,
       error: req.query.error || null,
     });
   } catch (err) {
     console.error('Dashboard error:', err);
-    res.render('dashboard', { pageTitle: 'Bibliothèques', libraries: [], sharedLibraries: [], history: [], favorites: [], watchlist: [], error: 'Erreur serveur' });
+    res.render('dashboard', { pageTitle: 'Bibliothèques', libraries: [], sharedLibraries: [], continueWatching: [], history: [], favorites: [], watchlist: [], stats: { totalVideos: 0, totalSize: 0, totalDuration: 0 }, error: 'Erreur serveur' });
   }
 });
 

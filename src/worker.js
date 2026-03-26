@@ -77,6 +77,28 @@ async function probeAudioCodec(videoPath) {
   }
 }
 
+async function probeAudioTracks(videoPath) {
+  try {
+    const stdout = await run('ffprobe', [
+      '-v', 'error',
+      '-select_streams', 'a',
+      '-show_entries', 'stream=index,codec_name:stream_tags=language,title',
+      '-of', 'json',
+      videoPath,
+    ], { timeout: 10000 });
+    const data = JSON.parse(stdout);
+    if (!data.streams || data.streams.length <= 1) return null;
+    return data.streams.map(s => ({
+      index: s.index,
+      codec: s.codec_name || null,
+      language: (s.tags && s.tags.language) || null,
+      title: (s.tags && s.tags.title) || null,
+    }));
+  } catch {
+    return null;
+  }
+}
+
 // ── Thumbnail ──
 
 async function generateThumbnail(videoPath, libraryPath, duration) {
@@ -131,9 +153,10 @@ async function processJob(job) {
     // 1. Metadata (probe first to get duration)
     let videoDuration = videoRows[0].duration;
     if (videoDuration === null) {
-      const [probeData, audioCodec] = await Promise.all([
+      const [probeData, audioCodec, audioTracks] = await Promise.all([
         probeVideo(video_path),
         probeAudioCodec(video_path),
+        probeAudioTracks(video_path),
       ]);
       const meta = extractMetadata(probeData);
       meta.audio_codec = audioCodec;
@@ -141,9 +164,11 @@ async function processJob(job) {
         videoDuration = meta.duration;
         await pool.execute(
           `UPDATE videos SET duration = ?, width = ?, height = ?,
-           codec = ?, audio_codec = ?, bitrate = ? WHERE id = ?`,
+           codec = ?, audio_codec = ?, bitrate = ?,
+           audio_tracks = ? WHERE id = ?`,
           [meta.duration || null, meta.width || null, meta.height || null,
-           meta.codec || null, meta.audio_codec || null, meta.bitrate || null, video_id]
+           meta.codec || null, meta.audio_codec || null, meta.bitrate || null,
+           audioTracks ? JSON.stringify(audioTracks) : null, video_id]
         );
       }
     }

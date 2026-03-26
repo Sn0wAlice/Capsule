@@ -310,6 +310,7 @@ router.get('/:id', async (req, res) => {
   const order = req.query.order || 'asc';
   const currentPath = req.query.path || '';
   const listMode = req.query.display || req.session.user.default_view || 'grid';
+  const filterUnwatched = req.query.unwatched === '1';
 
   try {
     const access = await getLibraryAccess(req.session.user.id, libraryId, req.session.user.role);
@@ -323,10 +324,19 @@ router.get('/:id', async (req, res) => {
     let hasMore = false;
 
     if (viewMode === 'flat') {
-      const orderCol = sort === 'date' ? 'v.updated_at' : sort === 'size' ? 'v.size' : 'v.filename';
+      const orderCol = sort === 'date' ? 'v.updated_at' : sort === 'size' ? 'v.size' : sort === 'views' ? 'v.view_count' : 'v.filename';
+      let extraJoin = '';
+      let extraWhere = '';
+      const params = [libraryId];
+      if (filterUnwatched) {
+        extraJoin = ' LEFT JOIN watch_history wh ON wh.video_id = v.id AND wh.user_id = ?';
+        extraWhere = ' AND wh.id IS NULL';
+        params.unshift(req.session.user.id);
+      }
+      params.push(PAGE_SIZE + 1);
       const [rows] = await pool.query(
-        `SELECT v.*, t.filename as thumb, t.sprite_filename as sprite FROM videos v LEFT JOIN thumbnails t ON t.video_id = v.id WHERE v.library_id = ? ORDER BY ${orderCol} ${order === 'desc' ? 'DESC' : 'ASC'} LIMIT ?`,
-        [libraryId, PAGE_SIZE + 1]
+        `SELECT v.*, t.filename as thumb, t.sprite_filename as sprite FROM videos v LEFT JOIN thumbnails t ON t.video_id = v.id${extraJoin} WHERE v.library_id = ?${extraWhere} ORDER BY ${orderCol} ${order === 'desc' ? 'DESC' : 'ASC'} LIMIT ?`,
+        params
       );
       hasMore = rows.length > PAGE_SIZE;
       if (hasMore) rows.pop();
@@ -337,7 +347,7 @@ router.get('/:id', async (req, res) => {
         [libraryId]
       );
 
-      const folders = new Set();
+      const folderCounts = {};
       const filesInPath = [];
 
       for (const video of rows) {
@@ -348,14 +358,15 @@ router.get('/:id', async (req, res) => {
 
         const parts = relative.split('/');
         if (parts.length > 1) {
-          folders.add(parts[0]);
+          folderCounts[parts[0]] = (folderCounts[parts[0]] || 0) + 1;
         } else if (parts.length === 1 && isInCurrentPath) {
           filesInPath.push(video);
         }
       }
 
       videos = filesInPath;
-      res.locals.folders = Array.from(folders).sort();
+      res.locals.folders = Object.keys(folderCounts).sort();
+      res.locals.folderCounts = folderCounts;
     }
 
     const [countResult] = await pool.execute(
@@ -376,6 +387,8 @@ router.get('/:id', async (req, res) => {
       listMode,
       permission: access.permission,
       folders: res.locals.folders || [],
+      folderCounts: res.locals.folderCounts || {},
+      filterUnwatched,
       scanned: req.query.scanned || null,
       error: req.query.error || null,
     });
