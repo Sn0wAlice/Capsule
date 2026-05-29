@@ -20,6 +20,7 @@ function formatSize(bytes) {
     <% if (items.length > 0) { %>
       <a href="/videos/<%= items[0].id %>?autoplay=1&playlist=<%= playlist.id %>" class="btn btn-sm btn-primary">Lire tout</a>
     <% } %>
+    <a href="/playlists/<%= playlist.id %>/export.m3u" class="btn btn-sm playlist-export-btn" title="Exporter en M3U">&#8595; M3U</a>
     <a href="/playlists" class="btn btn-sm">← Playlists</a>
     <form method="POST" action="/playlists/<%= playlist.id %>/delete" style="display:inline"
           onsubmit="return confirm('Supprimer cette playlist ?')">

@@ -41,6 +41,29 @@ router.post('/default-view', async (req, res) => {
   }
 });
 
+// Change username
+router.post('/username', async (req, res) => {
+  const username = (req.body.username || '').trim();
+  if (!username || username.length < 2 || username.length > 50) {
+    return res.redirect('/settings?error=Nom d\'utilisateur invalide (2-50 caractères)');
+  }
+  if (!/^[a-zA-Z0-9_.-]+$/.test(username)) {
+    return res.redirect('/settings?error=Nom d\'utilisateur invalide (lettres, chiffres, _ . - uniquement)');
+  }
+  try {
+    const [existing] = await pool.execute('SELECT id FROM users WHERE username = ? AND id != ?', [username, req.session.user.id]);
+    if (existing.length > 0) {
+      return res.redirect('/settings?error=Ce nom d\'utilisateur est déjà pris');
+    }
+    await pool.execute('UPDATE users SET username = ? WHERE id = ?', [username, req.session.user.id]);
+    req.session.user.username = username;
+    res.redirect('/settings?success=Nom d\'utilisateur modifié');
+  } catch (err) {
+    console.error('Username change error:', err);
+    res.redirect('/settings?error=Erreur serveur');
+  }
+});
+
 // Change password
 router.post('/password', async (req, res) => {
   const { current, password, confirm } = req.body;

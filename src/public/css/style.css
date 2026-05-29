@@ -2137,3 +2137,129 @@ a:hover {
   content-visibility: auto;
   contain-intrinsic-size: auto 200px;
 }
+
+/* === Description block (below video in player-main) === */
+
+.video-description-block {
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+
+/* — Affichage de la description existante — */
+.desc-display {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.desc-text {
+  flex: 1;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+.desc-edit-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  padding: 0.25rem 0.55rem;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+  margin-top: 0.1rem;
+}
+
+.desc-edit-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* — Zone d'édition — */
+.desc-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.desc-textarea {
+  width: 100%;
+  background: var(--bg-card, var(--bg-primary));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-family: inherit;
+  line-height: 1.65;
+  padding: 0.65rem 0.875rem;
+  resize: vertical;
+  min-height: 80px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+}
+
+.desc-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.desc-textarea::placeholder {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.desc-editor-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* === Tag links in player === */
+
+.tag-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.tag-link:hover {
+  text-decoration: underline;
+}
+
+/* === Edit modal (same as share modal) === */
+
+#edit-modal .modal-content {
+  min-width: 400px;
+}
+
+#edit-modal input[type="text"] {
+  width: 100%;
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  padding: 0.5rem 0.75rem;
+}
+
+#edit-modal input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* === Playlist view export button === */
+
+.playlist-export-btn {
+  font-size: 0.8rem;
+  padding: 0.25rem 0.6rem;
+}

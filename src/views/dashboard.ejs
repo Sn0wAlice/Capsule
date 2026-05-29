@@ -199,6 +199,7 @@ function formatDurationLong(seconds) {
             <form method="POST" action="/libraries/<%= lib.id %>/scan" style="display:inline">
               <button type="submit" class="btn btn-sm btn-primary">Scanner</button>
             </form>
+            <button type="button" class="btn btn-sm" onclick="openEditModal(<%= lib.id %>, '<%= lib.name.replace(/'/g, "\\'") %>', '<%= lib.path.replace(/'/g, "\\'") %>')">Modifier</button>
             <button type="button" class="btn btn-sm" onclick="openShareModal(<%= lib.id %>, '<%= lib.name.replace(/'/g, "\\'") %>')">Partager</button>
             <form method="POST" action="/libraries/<%= lib.id %>/delete" style="display:inline"
                   onsubmit="return confirm('Supprimer cette bibliothèque ?')">
@@ -242,6 +243,30 @@ function formatDurationLong(seconds) {
   </div>
 <% } %>
 
+<!-- Edit Library Modal -->
+<div class="modal-overlay" id="edit-modal" style="display:none">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>Modifier la bibliothèque</h2>
+      <button class="modal-close" onclick="closeEditModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form method="POST" id="edit-lib-form" action="">
+        <div class="form-group" style="margin-bottom:0.75rem">
+          <label style="display:block;margin-bottom:0.25rem;font-size:0.85rem;opacity:0.7">Nom</label>
+          <input type="text" name="name" id="edit-lib-name" required style="width:100%">
+        </div>
+        <div class="form-group" style="margin-bottom:1rem">
+          <label style="display:block;margin-bottom:0.25rem;font-size:0.85rem;opacity:0.7">Chemin (laisser vide pour ne pas changer)</label>
+          <input type="text" name="path" id="edit-lib-path" placeholder="Nouveau chemin..." style="width:100%">
+        </div>
+        <button type="submit" class="btn btn-primary">Enregistrer</button>
+        <button type="button" class="btn" onclick="closeEditModal()">Annuler</button>
+      </form>
+    </div>
+  </div>
+</div>
+
 <!-- Share Modal -->
 <div class="modal-overlay" id="share-modal" style="display:none">
   <div class="modal-content">
@@ -266,6 +291,21 @@ function formatDurationLong(seconds) {
 </div>
 
 <script>
+// Edit library modal
+function openEditModal(libId, libName, libPath) {
+  document.getElementById('edit-lib-form').action = '/libraries/' + libId + '/edit';
+  document.getElementById('edit-lib-name').value = libName;
+  document.getElementById('edit-lib-path').value = '';
+  document.getElementById('edit-lib-path').placeholder = libPath;
+  document.getElementById('edit-modal').style.display = 'flex';
+}
+function closeEditModal() {
+  document.getElementById('edit-modal').style.display = 'none';
+}
+document.getElementById('edit-modal').addEventListener('click', (e) => {
+  if (e.target.id === 'edit-modal') closeEditModal();
+});
+
 let currentShareLibId = null;
 
 function openShareModal(libId, libName) {

@@ -59,6 +59,26 @@ router.get('/', async (req, res) => {
       'SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 30'
     );
 
+    // Per-user stats: video count, total size, watch time, favorites, playlists
+    const [userStats] = await pool.execute(
+      `SELECT u.id,
+              COUNT(DISTINCT v.id) as video_count,
+              COALESCE(SUM(v.size), 0) as total_size,
+              COUNT(DISTINCT f.id) as favorite_count,
+              COUNT(DISTINCT wh.id) as watched_count,
+              COUNT(DISTINCT p.id) as playlist_count,
+              COALESCE(SUM(wh.progress), 0) as total_watch_time
+       FROM users u
+       LEFT JOIN libraries l ON l.user_id = u.id
+       LEFT JOIN videos v ON v.library_id = l.id
+       LEFT JOIN favorites f ON f.user_id = u.id
+       LEFT JOIN watch_history wh ON wh.user_id = u.id
+       LEFT JOIN playlists p ON p.user_id = u.id
+       GROUP BY u.id`
+    );
+    const userStatsMap = {};
+    for (const s of userStats) userStatsMap[s.id] = s;
+
     res.render('admin', {
       pageTitle: 'Administration',
       users,
@@ -66,6 +86,7 @@ router.get('/', async (req, res) => {
       jobs,
       jobStats,
       auditLogs,
+      userStatsMap,
       success: req.query.success || null,
       error: req.query.error || null,
     });

@@ -53,6 +53,11 @@ function formatBitrate(bps) {
           <button class="btn btn-sm btn-wl<%= isWatchlisted ? ' active' : '' %>" id="btn-wl" title="A regarder (W)">
             <span id="wl-icon"><%- isWatchlisted ? '&#10003;' : '&#9201;' %></span>
           </button>
+          <a href="/videos/<%= video.id %>/download" class="btn btn-sm" title="Télécharger" download>&#8595; DL</a>
+          <% if (['owner','admin','write'].includes(permission)) { %>
+          <button class="btn btn-sm" id="btn-reprocess" title="Regénérer thumbnail et métadonnées">&#8635; Retraiter</button>
+          <button class="btn btn-sm btn-danger" id="btn-delete" title="Supprimer de la bibliothèque">&#128465; Supprimer</button>
+          <% } %>
           <% if (playlists.length > 0) { %>
           <select id="add-to-playlist" class="autoplay-select" title="Ajouter à une playlist">
             <option value="">+ Playlist</option>
@@ -77,7 +82,7 @@ function formatBitrate(bps) {
         <div class="tags-list" id="tags-list">
           <% for (const tag of tags) { %>
             <span class="tag tag-<%= tag.color %>" data-id="<%= tag.id %>">
-              <%= tag.name %>
+              <a href="/videos?tag=<%= encodeURIComponent(tag.name) %>" class="tag-link"><%= tag.name %></a>
               <% if (['owner','admin','write'].includes(permission)) { %>
                 <button class="tag-remove" data-id="<%= tag.id %>">&times;</button>
               <% } %>
@@ -90,6 +95,47 @@ function formatBitrate(bps) {
         </form>
         <% } %>
       </div>
+
+      <!-- Description (below video, in player-main) -->
+      <% const canWrite = ['owner','admin','write'].includes(permission); %>
+      <% if (canWrite || video.description) { %>
+      <div class="video-description-block" id="desc-block">
+        <% if (video.description) { %>
+          <!-- Description existante affichée -->
+          <div class="desc-display" id="desc-display">
+            <p class="desc-text" id="desc-text"><%= video.description %></p>
+            <% if (canWrite) { %>
+            <button class="desc-edit-btn" id="desc-edit-btn" title="Modifier la description">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Modifier
+            </button>
+            <% } %>
+          </div>
+        <% } %>
+
+        <% if (canWrite) { %>
+        <!-- Zone d'édition (masquée si description déjà présente) -->
+        <div class="desc-editor" id="desc-editor" style="<%= video.description ? 'display:none' : '' %>">
+          <textarea
+            id="video-description"
+            class="desc-textarea"
+            placeholder="Ajouter une description…"
+            rows="3"
+          ><%= video.description || '' %></textarea>
+          <div class="desc-editor-actions">
+            <button class="btn btn-sm btn-primary" id="btn-save-desc">Enregistrer</button>
+            <% if (video.description) { %>
+            <button class="btn btn-sm" id="desc-cancel-btn">Annuler</button>
+            <% } %>
+          </div>
+        </div>
+        <% } %>
+
+        <% if (!video.description && !canWrite) { %>
+          <!-- Rien à afficher pour les lecteurs sans description -->
+        <% } %>
+      </div>
+      <% } %>
     </div>
 
     <!-- Right: Info Panel -->
@@ -174,6 +220,7 @@ function formatBitrate(bps) {
         </div>
       </div>
 
+
       <div class="sidebar-section sidebar-shortcuts">
         <h3>Raccourcis</h3>
         <div class="shortcut-row"><kbd>F</kbd> <span>Favoris</span></div>
@@ -215,8 +262,15 @@ function formatBitrate(bps) {
 <script src="https://cdn.jsdelivr.net/npm/artplayer@5.2.1/dist/artplayer.js"></script>
 <script>
   const VIDEO_ID = <%= video.id %>;
+  const LIBRARY_ID = <%= video.library_id %>;
   const SAVED_PROGRESS = <%= savedProgress %>;
   const CAN_WRITE = <%= ['owner','admin','write'].includes(permission) %>;
+  <%
+    let audioTracksJs = null;
+    try { audioTracksJs = video.audio_tracks ? (typeof video.audio_tracks === 'string' ? JSON.parse(video.audio_tracks) : video.audio_tracks) : null; } catch(e) {}
+  %>
+  const AUDIO_TRACKS = <%- JSON.stringify(audioTracksJs || []) %>;
+  const SUBTITLES = <%- JSON.stringify(subtitles.map(s => ({ label: s.label, language: s.language, url: '/videos/' + video.id + '/subtitles/' + encodeURIComponent(s.filename) }))) %>;
 
   // Restore autoplay mode from localStorage
   const autoplaySelect = document.getElementById('autoplay-mode');
@@ -230,7 +284,7 @@ function formatBitrate(bps) {
   const savedRate = parseFloat(localStorage.getItem('capsule_playback_rate')) || 1;
 
   // Init ArtPlayer
-  const art = new Artplayer({
+  const artConfig = {
     container: '#artplayer-app',
     url: '/videos/' + VIDEO_ID + '/stream',
     type: '<%= video.mime_type === "video/x-matroska" ? "mkv" : "" %>',
@@ -255,12 +309,32 @@ function formatBitrate(bps) {
         position: 'right',
         html: '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/><rect x="4" y="5" width="2" height="14" rx="1"/></svg>',
         tooltip: 'Vidéo suivante (N)',
-        click: function () {
-          goNext();
-        },
+        click: function () { goNext(); },
       },
     ],
-  });
+  };
+  // Inject subtitle tracks if available
+  if (SUBTITLES.length > 0) {
+    artConfig.subtitle = {
+      url: SUBTITLES[0].url,
+      type: SUBTITLES[0].url.endsWith('.vtt') ? 'vtt' : 'srt',
+      style: { color: '#fff', 'font-size': '20px' },
+      encoding: 'utf-8',
+    };
+    if (SUBTITLES.length > 1) {
+      artConfig.settings = [{
+        html: 'Sous-titres',
+        width: 200,
+        tooltip: SUBTITLES[0].label,
+        selector: SUBTITLES.map((s, i) => ({ html: s.label, default: i === 0, url: s.url })),
+        onSelect: function(item) {
+          art.subtitle.url = item.url;
+          return item.html;
+        },
+      }];
+    }
+  }
+  const art = new Artplayer(artConfig);
 
   // Resize container to match video aspect ratio
   art.on('video:loadedmetadata', () => {
@@ -482,6 +556,120 @@ function formatBitrate(bps) {
       }).then(r => r.json()).then(() => {
         playlistSelect.value = '';
       }).catch(() => {});
+    });
+  }
+
+  // Delete video
+  const btnDelete = document.getElementById('btn-delete');
+  if (btnDelete) {
+    btnDelete.addEventListener('click', () => {
+      if (!confirm('Supprimer cette vidéo de la bibliothèque ? (le fichier reste sur le disque)')) return;
+      fetch('/videos/' + VIDEO_ID + '/delete', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+          if (data.ok) window.location.href = '/libraries/' + LIBRARY_ID;
+          else alert('Erreur: ' + (data.error || 'inconnue'));
+        })
+        .catch(() => alert('Erreur réseau'));
+    });
+  }
+
+  // Re-process video
+  const btnReprocess = document.getElementById('btn-reprocess');
+  if (btnReprocess) {
+    btnReprocess.addEventListener('click', () => {
+      if (!confirm('Relancer le traitement (thumbnail + métadonnées) pour cette vidéo ?')) return;
+      btnReprocess.disabled = true;
+      btnReprocess.textContent = '⏳ En cours...';
+      fetch('/videos/' + VIDEO_ID + '/reprocess', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+          if (data.ok) {
+            btnReprocess.textContent = '✓ Relancé';
+            setTimeout(() => { btnReprocess.disabled = false; btnReprocess.innerHTML = '&#8635; Retraiter'; }, 3000);
+          } else {
+            btnReprocess.disabled = false;
+            btnReprocess.innerHTML = '&#8635; Retraiter';
+            alert('Erreur: ' + (data.error || 'inconnue'));
+          }
+        })
+        .catch(() => { btnReprocess.disabled = false; btnReprocess.innerHTML = '&#8635; Retraiter'; });
+    });
+  }
+
+  // Description — save + toggle edit/display
+  const btnSaveDesc   = document.getElementById('btn-save-desc');
+  const descTextarea  = document.getElementById('video-description');
+  const descDisplay   = document.getElementById('desc-display');
+  const descEditor    = document.getElementById('desc-editor');
+  const descText      = document.getElementById('desc-text');
+  const descEditBtn   = document.getElementById('desc-edit-btn');
+  const descCancelBtn = document.getElementById('desc-cancel-btn');
+
+  function showEditor() {
+    if (descDisplay) descDisplay.style.display = 'none';
+    if (descEditor)  descEditor.style.display = '';
+    if (descTextarea) descTextarea.focus();
+  }
+  function showDisplay(newText) {
+    if (descText) descText.textContent = newText;
+    if (descDisplay) descDisplay.style.display = '';
+    if (descEditor)  descEditor.style.display = 'none';
+  }
+
+  if (descEditBtn)   descEditBtn.addEventListener('click', showEditor);
+  if (descCancelBtn) descCancelBtn.addEventListener('click', () => {
+    if (descTextarea) descTextarea.value = descText ? descText.textContent : '';
+    showDisplay(descText ? descText.textContent : '');
+  });
+
+  if (btnSaveDesc && descTextarea) {
+    btnSaveDesc.addEventListener('click', () => {
+      const val = descTextarea.value.trim();
+      btnSaveDesc.disabled = true;
+      fetch('/videos/' + VIDEO_ID + '/description', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: val }),
+      }).then(r => r.json()).then(data => {
+        if (data.ok) {
+          // Affiche la description sauvegardée
+          if (val) {
+            // S'il n'y avait pas de display, en crée un dynamiquement
+            if (!descDisplay) {
+              const block = document.getElementById('desc-block');
+              const div = document.createElement('div');
+              div.className = 'desc-display';
+              div.id = 'desc-display';
+              div.innerHTML = '<p class="desc-text" id="desc-text"></p>' +
+                '<button class="desc-edit-btn" id="desc-edit-btn" title="Modifier"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Modifier</button>';
+              if (descEditor) block.insertBefore(div, descEditor);
+              div.querySelector('.desc-edit-btn').addEventListener('click', showEditor);
+              div.querySelector('.desc-text').textContent = val;
+              if (descEditor) descEditor.style.display = 'none';
+              // Add cancel button if not present
+              if (!document.getElementById('desc-cancel-btn') && descEditor) {
+                const cancelBtn = document.createElement('button');
+                cancelBtn.className = 'btn btn-sm';
+                cancelBtn.id = 'desc-cancel-btn';
+                cancelBtn.textContent = 'Annuler';
+                cancelBtn.addEventListener('click', () => {
+                  descEditor.style.display = 'none';
+                  div.style.display = '';
+                });
+                descEditor.querySelector('.desc-editor-actions').appendChild(cancelBtn);
+              }
+            } else {
+              showDisplay(val);
+            }
+          } else {
+            // Description vidée — reste en mode éditeur
+            if (descDisplay) descDisplay.style.display = 'none';
+          }
+          btnSaveDesc.textContent = '✓ Enregistré';
+          setTimeout(() => { btnSaveDesc.disabled = false; btnSaveDesc.textContent = 'Enregistrer'; }, 2000);
+        }
+      }).catch(() => { btnSaveDesc.disabled = false; });
     });
   }
 

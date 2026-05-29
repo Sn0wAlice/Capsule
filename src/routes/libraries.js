@@ -64,6 +64,50 @@ router.post('/:id/delete', async (req, res) => {
   }
 });
 
+// Edit library (rename / change path) — owner or admin only
+router.post('/:id/edit', async (req, res) => {
+  try {
+    const access = await getLibraryAccess(req.session.user.id, req.params.id, req.session.user.role);
+    if (access.permission !== 'owner' && access.permission !== 'admin') {
+      return res.redirect('/dashboard?error=Accès refusé');
+    }
+
+    const name = (req.body.name || '').trim();
+    const newPath = (req.body.path || '').trim();
+    if (!name) return res.redirect('/dashboard?error=Nom requis');
+
+    const updates = { name };
+
+    if (newPath) {
+      const resolvedPath = path.resolve(newPath);
+      if (!fs.existsSync(resolvedPath)) {
+        return res.redirect('/dashboard?error=Le chemin n\'existe pas');
+      }
+      const blockedPaths = ['/', '/etc', '/root', '/var', '/usr', '/bin', '/sbin', '/sys', '/proc', '/dev'];
+      if (blockedPaths.includes(resolvedPath) || resolvedPath.startsWith('/etc/') || resolvedPath.startsWith('/proc/')) {
+        return res.redirect('/dashboard?error=Ce chemin n\'est pas autorisé');
+      }
+      updates.path = newPath;
+
+      // Re-watch with new path
+      const { unwatchLibrary, watchLibrary } = require('../services/watcher');
+      unwatchLibrary(parseInt(req.params.id));
+      watchLibrary(parseInt(req.params.id), newPath);
+    }
+
+    if (updates.path) {
+      await pool.execute('UPDATE libraries SET name = ?, path = ? WHERE id = ?', [name, updates.path, req.params.id]);
+    } else {
+      await pool.execute('UPDATE libraries SET name = ? WHERE id = ?', [name, req.params.id]);
+    }
+
+    res.redirect('/dashboard?success=Bibliothèque mise à jour');
+  } catch (err) {
+    console.error('Edit library error:', err);
+    res.redirect('/dashboard?error=Erreur lors de la mise à jour');
+  }
+});
+
 // Scan library (owner, admin, or write) — runs in background
 router.post('/:id/scan', async (req, res) => {
   try {

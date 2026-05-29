@@ -164,6 +164,64 @@ router.post('/:id/remove', async (req, res) => {
   }
 });
 
+// Export playlist as M3U
+router.get('/:id/export.m3u', async (req, res) => {
+  try {
+    const [pls] = await pool.execute(
+      'SELECT * FROM playlists WHERE id = ? AND user_id = ?',
+      [req.params.id, req.session.user.id]
+    );
+    if (pls.length === 0) return res.status(404).send('Playlist not found');
+    const playlist = pls[0];
+
+    let items;
+    if (playlist.is_smart && playlist.smart_criteria) {
+      const criteria = typeof playlist.smart_criteria === 'string'
+        ? JSON.parse(playlist.smart_criteria) : playlist.smart_criteria;
+      const { getAccessibleLibraryIds } = require('../middleware/auth');
+      const libIds = await getAccessibleLibraryIds(req.session.user.id, req.session.user.role);
+      if (libIds.length === 0) {
+        items = [];
+      } else {
+        const [rows] = await pool.query(
+          `SELECT v.id, v.filename, v.title, v.duration, l.path as library_path, v.filepath
+           FROM videos v JOIN libraries l ON l.id = v.library_id
+           WHERE l.id IN (?) ORDER BY v.filename ASC LIMIT 500`,
+          [libIds]
+        );
+        items = rows;
+      }
+    } else {
+      [items] = await pool.execute(
+        `SELECT v.id, v.filename, v.title, v.duration, l.path as library_path, v.filepath, pi.position
+         FROM playlist_items pi
+         JOIN videos v ON v.id = pi.video_id
+         JOIN libraries l ON l.id = v.library_id
+         WHERE pi.playlist_id = ?
+         ORDER BY pi.position ASC`,
+        [req.params.id]
+      );
+    }
+
+    const lines = ['#EXTM3U'];
+    for (const item of items) {
+      const duration = Math.round(item.duration) || -1;
+      const title = item.title || item.filename;
+      const fullPath = require('path').join(item.library_path, item.filepath);
+      lines.push(`#EXTINF:${duration},${title}`);
+      lines.push(fullPath);
+    }
+
+    const safeFilename = encodeURIComponent(playlist.name.replace(/[^\w\s-]/g, '')) + '.m3u';
+    res.setHeader('Content-Type', 'audio/x-mpegurl; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+    res.send(lines.join('\n'));
+  } catch (err) {
+    console.error('M3U export error:', err);
+    res.status(500).send('Export error');
+  }
+});
+
 // View playlist
 router.get('/:id', async (req, res) => {
   try {

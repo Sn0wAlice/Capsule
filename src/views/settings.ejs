@@ -43,12 +43,15 @@
   <!-- Account -->
   <div class="card">
     <h2>Compte</h2>
-    <div class="setting-row">
-      <div class="setting-info">
+    <form method="POST" action="/settings/username">
+      <div class="setting-row" style="flex-direction: column; align-items: stretch; gap: 0.75rem;">
         <span class="setting-label">Nom d'utilisateur</span>
-        <span class="setting-desc"><%= user.username %></span>
+        <div class="form-group">
+          <input type="text" name="username" value="<%= user.username %>" minlength="2" maxlength="50" required>
+        </div>
+        <button type="submit" class="btn btn-sm btn-primary">Modifier</button>
       </div>
-    </div>
+    </form>
     <form method="POST" action="/settings/password">
       <div class="setting-row" style="flex-direction: column; align-items: stretch; gap: 0.75rem;">
         <span class="setting-label">Changer le mot de passe</span>

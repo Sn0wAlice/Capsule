@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node src/app.js",
     "worker": "node src/worker.js",
-    "dev": "node --watch src/app.js"
+    "dev": "node --watch src/app.js",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "test:watch": "jest --watch"
   },
   "dependencies": {
     "artplayer": "^5.2.1",
@@ -20,5 +23,9 @@
     "express-rate-limit": "^8.3.1",
     "express-session": "^1.18.1",
     "mysql2": "^3.12.0"
+  },
+  "devDependencies": {
+    "jest": "^30.4.2",
+    "supertest": "^7.2.2"
   }
 }

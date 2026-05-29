@@ -1,6 +1,6 @@
 const path = require('path');
 const pool = require('../config/database');
-const { indexSingleFile, removeSingleFile, CAPSULE_DIR, VIDEO_EXTENSIONS } = require('./scanner');
+const { indexSingleFile, removeSingleFile, indexSubtitlesForVideo, CAPSULE_DIR, VIDEO_EXTENSIONS, SUBTITLE_EXTENSIONS } = require('./scanner');
 
 let chokidar;
 try {
@@ -14,6 +14,11 @@ const watchers = new Map(); // libraryId -> FSWatcher
 function isVideoFile(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   return VIDEO_EXTENSIONS.has(ext);
+}
+
+function isSubtitleFile(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  return SUBTITLE_EXTENSIONS.has(ext);
 }
 
 function watchLibrary(libraryId, libraryPath) {
@@ -43,6 +48,18 @@ function watchLibrary(libraryId, libraryPath) {
     .on('add', (filePath) => {
       if (isVideoFile(filePath)) {
         indexSingleFile(libraryId, libraryPath, filePath);
+      } else if (isSubtitleFile(filePath)) {
+        // Find the matching video and index subtitle
+        const dir = path.dirname(filePath);
+        const basename = path.basename(filePath, path.extname(filePath)).split('.')[0];
+        pool.execute(
+          `SELECT v.id FROM videos v JOIN libraries l ON l.id = v.library_id WHERE v.library_id = ? AND v.filename LIKE ?`,
+          [libraryId, basename + '%']
+        ).then(([rows]) => {
+          if (rows.length > 0) {
+            indexSubtitlesForVideo(rows[0].id, libraryPath, path.join(dir, rows[0].filename || basename)).catch(() => {});
+          }
+        }).catch(() => {});
       }
     })
     .on('unlink', (filePath) => {

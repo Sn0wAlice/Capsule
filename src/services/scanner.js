@@ -3,6 +3,16 @@ const path = require('path');
 const pool = require('../config/database');
 
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.mkv', '.avi', '.webm', '.mov', '.m4v', '.flv', '.wmv']);
+const SUBTITLE_EXTENSIONS = new Set(['.srt', '.vtt']);
+
+// Detect language tag from subtitle filename (e.g. video.fr.srt → fr, video.en.vtt → en)
+function parseSubtitleMeta(subFilename, videoBasename) {
+  const noExt = path.basename(subFilename, path.extname(subFilename));
+  const suffix = noExt.slice(videoBasename.length).replace(/^[._-]/, '');
+  const lang = suffix || 'fr';
+  const labels = { fr: 'Français', en: 'English', es: 'Español', de: 'Deutsch', it: 'Italiano', pt: 'Português', ja: '日本語', zh: '中文', ar: 'العربية' };
+  return { language: lang, label: labels[lang] || lang.toUpperCase() };
+}
 
 const MIME_MAP = {
   '.mp4': 'video/mp4',
@@ -99,6 +109,7 @@ async function scanLibrary(libraryId) {
       if (videoId) {
         const fullVideoPath = path.join(library.path, file.filepath);
         await enqueueJob(videoId, library.path, fullVideoPath);
+        await indexSubtitlesForVideo(videoId, library.path, fullVideoPath);
       }
 
       added++;
@@ -126,6 +137,37 @@ async function scanLibrary(libraryId) {
   }
 
   return { total: files.length, added };
+}
+
+// ── Index subtitle files alongside a video ──
+
+async function indexSubtitlesForVideo(videoId, libraryPath, videoFilePath) {
+  const dir = path.dirname(videoFilePath);
+  const videoBasename = path.basename(videoFilePath, path.extname(videoFilePath));
+  let entries;
+  try { entries = fs.readdirSync(dir); } catch { return; }
+
+  for (const entry of entries) {
+    const ext = path.extname(entry).toLowerCase();
+    if (!SUBTITLE_EXTENSIONS.has(ext)) continue;
+    const entryBasename = path.basename(entry, ext);
+    // Match: same basename, or basename with language suffix (e.g. video.fr.srt)
+    if (entryBasename !== videoBasename && !entryBasename.startsWith(videoBasename + '.') && !entryBasename.startsWith(videoBasename + '_')) continue;
+    const subFullPath = path.join(dir, entry);
+    if (!fs.existsSync(subFullPath)) continue;
+    const relPath = path.relative(libraryPath, subFullPath);
+    const { language, label } = parseSubtitleMeta(entry, videoBasename);
+    try {
+      await pool.execute(
+        `INSERT INTO subtitles (video_id, label, language, filename)
+         VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE label = VALUES(label), language = VALUES(language)`,
+        [videoId, label, language, relPath]
+      );
+    } catch (err) {
+      console.error(`[scanner] Subtitle index error for ${relPath}:`, err.message);
+    }
+  }
 }
 
 // ── Index a single new file (used by watcher) ──
@@ -165,6 +207,7 @@ async function indexSingleFile(libraryId, libraryPath, filePath) {
 
     if (videoId) {
       await enqueueJob(videoId, libraryPath, filePath);
+      await indexSubtitlesForVideo(videoId, libraryPath, filePath);
       console.log(`[watcher] Indexed: ${relativePath}`);
     }
   } catch (err) {
@@ -206,6 +249,8 @@ module.exports = {
   scanLibrary,
   indexSingleFile,
   removeSingleFile,
+  indexSubtitlesForVideo,
   CAPSULE_DIR,
   VIDEO_EXTENSIONS,
+  SUBTITLE_EXTENSIONS,
 };

@@ -387,6 +387,128 @@ router.post('/bulk/delete', async (req, res) => {
   }
 });
 
+// Download video file
+router.get('/:id/download', async (req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT v.*, l.path as library_path FROM videos v JOIN libraries l ON l.id = v.library_id WHERE v.id = ?`,
+      [req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).send('Video not found');
+    const video = rows[0];
+    const access = await getLibraryAccess(req.session.user.id, video.library_id, req.session.user.role);
+    if (!access.allowed) return res.status(404).send('Video not found');
+    const filePath = safePath(video.library_path, video.filepath);
+    if (!filePath || !fs.existsSync(filePath)) return res.status(404).send('File not found on disk');
+    const filename = path.basename(filePath);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    res.setHeader('Content-Type', video.mime_type || 'application/octet-stream');
+    fs.createReadStream(filePath).pipe(res);
+  } catch (err) {
+    console.error('Download error:', err);
+    res.status(500).send('Download error');
+  }
+});
+
+// Serve subtitle file
+router.get('/:id/subtitles/:filename', async (req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT s.filename, v.library_id, l.path as library_path
+       FROM subtitles s
+       JOIN videos v ON v.id = s.video_id
+       JOIN libraries l ON l.id = v.library_id
+       WHERE s.video_id = ? AND s.filename = ?`,
+      [req.params.id, req.params.filename]
+    );
+    if (rows.length === 0) return res.status(404).send('');
+    const access = await getLibraryAccess(req.session.user.id, rows[0].library_id, req.session.user.role);
+    if (!access.allowed) return res.status(404).send('');
+    const subPath = safePath(rows[0].library_path, rows[0].filename);
+    if (!subPath || !fs.existsSync(subPath)) return res.status(404).send('');
+    const ext = path.extname(rows[0].filename).toLowerCase();
+    res.setHeader('Content-Type', ext === '.vtt' ? 'text/vtt' : 'text/plain');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    fs.createReadStream(subPath).pipe(res);
+  } catch (err) {
+    console.error('Subtitle serve error:', err);
+    res.status(500).send('');
+  }
+});
+
+// Delete individual video (requires write permission)
+router.post('/:id/delete', async (req, res) => {
+  try {
+    const [videoRows] = await pool.execute(
+      'SELECT v.id, v.library_id FROM videos v WHERE v.id = ?', [req.params.id]
+    );
+    if (videoRows.length === 0) return res.status(404).json({ error: 'not found' });
+    const access = await getLibraryAccess(req.session.user.id, videoRows[0].library_id, req.session.user.role);
+    if (!access.allowed || !canWrite(access.permission)) {
+      return res.status(403).json({ error: 'permission denied' });
+    }
+    await pool.execute('DELETE FROM videos WHERE id = ?', [req.params.id]);
+    res.json({ ok: true, libraryId: videoRows[0].library_id });
+  } catch (err) {
+    console.error('Delete video error:', err);
+    res.status(500).json({ error: 'delete failed' });
+  }
+});
+
+// Re-process video (re-enqueue job for metadata + thumbnail)
+router.post('/:id/reprocess', async (req, res) => {
+  try {
+    const [videoRows] = await pool.execute(
+      'SELECT v.id, v.library_id, v.filepath, l.path as library_path FROM videos v JOIN libraries l ON l.id = v.library_id WHERE v.id = ?',
+      [req.params.id]
+    );
+    if (videoRows.length === 0) return res.status(404).json({ error: 'not found' });
+    const access = await getLibraryAccess(req.session.user.id, videoRows[0].library_id, req.session.user.role);
+    if (!access.allowed || !canWrite(access.permission)) {
+      return res.status(403).json({ error: 'permission denied' });
+    }
+    const v = videoRows[0];
+    const videoPath = path.join(v.library_path, v.filepath);
+    // Remove existing thumbnail + reset metadata
+    await pool.execute('DELETE FROM thumbnails WHERE video_id = ?', [v.id]);
+    await pool.execute(
+      'UPDATE videos SET duration = NULL, width = NULL, height = NULL, codec = NULL, audio_codec = NULL, bitrate = NULL WHERE id = ?',
+      [v.id]
+    );
+    // Cancel any pending/processing job
+    await pool.execute("DELETE FROM jobs WHERE video_id = ? AND status IN ('pending','processing')", [v.id]);
+    // Enqueue fresh job
+    await pool.execute(
+      'INSERT INTO jobs (video_id, library_path, video_path) VALUES (?, ?, ?)',
+      [v.id, v.library_path, videoPath]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Reprocess error:', err);
+    res.status(500).json({ error: 'reprocess failed' });
+  }
+});
+
+// Save video description (requires write permission)
+router.post('/:id/description', async (req, res) => {
+  const description = (req.body.description || '').trim();
+  try {
+    const [videoRows] = await pool.execute(
+      'SELECT v.id, v.library_id FROM videos v WHERE v.id = ?', [req.params.id]
+    );
+    if (videoRows.length === 0) return res.status(404).json({ error: 'not found' });
+    const access = await getLibraryAccess(req.session.user.id, videoRows[0].library_id, req.session.user.role);
+    if (!access.allowed || !canWrite(access.permission)) {
+      return res.status(403).json({ error: 'permission denied' });
+    }
+    await pool.execute('UPDATE videos SET description = ? WHERE id = ?', [description || null, req.params.id]);
+    res.json({ ok: true, description });
+  } catch (err) {
+    console.error('Description save error:', err);
+    res.status(500).json({ error: 'save failed' });
+  }
+});
+
 // Search videos (across all accessible libraries)
 router.get('/', async (req, res) => {
   const q = (req.query.q || '').trim();
@@ -594,6 +716,12 @@ router.get('/:id', async (req, res) => {
       [req.session.user.id]
     );
 
+    // Get subtitles for this video
+    const [subtitleRows] = await pool.execute(
+      'SELECT id, label, language, filename FROM subtitles WHERE video_id = ? ORDER BY label',
+      [video.id]
+    );
+
     // Similar videos from same library
     const [simRows] = await pool.execute(
       `SELECT v.id, v.filename, v.title, v.size, t.filename as thumb
@@ -626,6 +754,7 @@ router.get('/:id', async (req, res) => {
       breadcrumb,
       tags: tagRows,
       playlists: userPlaylists,
+      subtitles: subtitleRows,
       permission: access.permission,
     });
   } catch (err) {
