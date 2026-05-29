@@ -2138,6 +2138,46 @@ a:hover {
   contain-intrinsic-size: auto 200px;
 }
 
+/* === Overlay "cliquer pour activer le son" === */
+
+#unmute-overlay {
+  position: absolute;
+  bottom: 56px; /* au-dessus de la barre de contrôles ArtPlayer */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  cursor: pointer;
+  animation: unmute-fadein 0.25s ease;
+}
+
+@keyframes unmute-fadein {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.unmute-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 2rem;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 0.55rem 1.1rem 0.55rem 0.85rem;
+  white-space: nowrap;
+  transition: background 0.15s;
+  user-select: none;
+}
+
+#unmute-overlay:hover .unmute-inner {
+  background: rgba(139, 92, 246, 0.85); /* accent */
+  border-color: transparent;
+}
+
 /* === Description block (below video in player-main) === */
 
 .video-description-block {

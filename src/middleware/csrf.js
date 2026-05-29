@@ -16,6 +16,12 @@ function csrfToken(req, res, next) {
   next();
 }
 
+// Routes exemptées de CSRF (faible risque, appelées par des mécanismes qui ne peuvent pas
+// facilement transporter le token, ex: sendBeacon / keepalive depuis le player)
+const CSRF_EXEMPT = [
+  /^\/videos\/\d+\/progress$/,
+];
+
 // Middleware: validate token on state-changing requests
 function csrfProtection(req, res, next) {
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
@@ -24,6 +30,11 @@ function csrfProtection(req, res, next) {
 
   // Skip for unauthenticated requests (login/register handle their own flow)
   if (!req.session || !req.session.user) {
+    return next();
+  }
+
+  // Routes explicitement exemptées
+  if (CSRF_EXEMPT.some(pattern => pattern.test(req.path))) {
     return next();
   }
 

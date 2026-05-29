@@ -668,12 +668,13 @@ router.get('/:id', async (req, res) => {
     const { video, access } = await getVideoWithAccess(req.params.id, req.session.user.id, req.session.user.role);
     if (!video || !access.allowed) return res.redirect('/dashboard');
 
-    // Get saved progress
+    // Get saved progress — en mode autoplay on repart toujours de 0
+    const isAutoplay = req.query.autoplay === '1';
     const [progressRows] = await pool.execute(
       'SELECT progress FROM watch_history WHERE user_id = ? AND video_id = ?',
       [req.session.user.id, video.id]
     );
-    const savedProgress = progressRows.length > 0 ? progressRows[0].progress : 0;
+    const savedProgress = isAutoplay ? 0 : (progressRows.length > 0 ? progressRows[0].progress : 0);
 
     // Check if favorited
     const [favRows] = await pool.execute(
@@ -690,10 +691,12 @@ router.get('/:id', async (req, res) => {
     const isWatchlisted = wlRows.length > 0;
 
     // Record in watch history + increment view count
+    // En autoplay : on écrase le progress à 0 en DB pour que la prochaine lecture reprenne
+    // depuis le début (évite de repartir d'un timestamp stale si la vidéo est re-sélectionnée)
     await pool.execute(
       `INSERT INTO watch_history (user_id, video_id, progress)
        VALUES (?, ?, ?)
-       ON DUPLICATE KEY UPDATE watched_at = CURRENT_TIMESTAMP`,
+       ON DUPLICATE KEY UPDATE watched_at = CURRENT_TIMESTAMP${isAutoplay ? ', progress = 0' : ''}`,
       [req.session.user.id, video.id, savedProgress]
     );
     await pool.execute(

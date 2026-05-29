@@ -45,6 +45,12 @@ app.use(express.static(path.join(__dirname, 'public'), {
   etag: true,
 }));
 
+// ArtPlayer servi localement depuis node_modules (évite dépendance CDN)
+app.use('/vendor/artplayer', express.static(
+  path.join(__dirname, '../node_modules/artplayer/dist'),
+  { maxAge: '30d', etag: true, immutable: true }
+));
+
 // Session store
 const sessionStore = new MySQLStore({
   clearExpired: true,

@@ -258,8 +258,7 @@ function formatBitrate(bps) {
   <% } %>
 </div>
 
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/artplayer@5.2.1/dist/artplayer.css">
-<script src="https://cdn.jsdelivr.net/npm/artplayer@5.2.1/dist/artplayer.js"></script>
+<script src="/vendor/artplayer/artplayer.js"></script>
 <script>
   const VIDEO_ID = <%= video.id %>;
   const LIBRARY_ID = <%= video.library_id %>;
@@ -280,15 +279,19 @@ function formatBitrate(bps) {
     localStorage.setItem('capsule_autoplay', autoplaySelect.value);
   });
 
-  // Restore saved playback rate
-  const savedRate = parseFloat(localStorage.getItem('capsule_playback_rate')) || 1;
+  // Restore saved playback rate + volume
+  // Note : le muted state n'est JAMAIS persisté — chaque session démarre avec le son
+  const savedRate   = parseFloat(localStorage.getItem('capsule_playback_rate')) || 1;
+  const savedVolume = parseFloat(localStorage.getItem('capsule_volume'))        || 0.7;
+  // Nettoyer toute valeur stale qui aurait pu être écrite par une version précédente
+  localStorage.removeItem('capsule_muted');
 
   // Init ArtPlayer
   const artConfig = {
     container: '#artplayer-app',
     url: '/videos/' + VIDEO_ID + '/stream',
     type: '<%= video.mime_type === "video/x-matroska" ? "mkv" : "" %>',
-    volume: 0.7,
+    volume: savedVolume,
     autoSize: false,
     autoMini: true,
     loop: false,
@@ -304,6 +307,9 @@ function formatBitrate(bps) {
     miniProgressBar: true,
     playsInline: true,
     theme: '#8b5cf6',
+    // Désactiver le plugin auto-playback d'ArtPlayer qui restaure la position depuis localStorage
+    // → c'est lui qui causait le démarrage à 00:05, on gère la position nous-mêmes via SAVED_PROGRESS
+    autoPlayback: false,
     controls: [
       {
         position: 'right',
@@ -353,27 +359,22 @@ function formatBitrate(bps) {
   const shouldAutoplay = urlParams.get('autoplay') === '1';
 
   art.on('ready', () => {
-    // Restore playback rate
     if (savedRate !== 1) art.playbackRate = savedRate;
+
+    // Reprendre là où on en était (SAVED_PROGRESS = 0 si autoplay, cf. route serveur)
     if (SAVED_PROGRESS > 2) {
       art.currentTime = SAVED_PROGRESS;
     }
+
     if (shouldAutoplay) {
-      // Wait for the seek to settle before playing
-      const tryPlay = () => {
-        const p = art.play();
-        if (p && typeof p.catch === 'function') {
-          p.catch(() => {
-            // Browser blocked autoplay — try muted
-            art.muted = true;
-            art.play().catch(() => {});
-          });
-        }
-      };
-      if (SAVED_PROGRESS > 2) {
-        art.once('video:canplay', tryPlay);
-      } else {
-        tryPlay();
+      const p = art.play();
+      if (p && typeof p.catch === 'function') {
+        p.catch(() => {
+          // Browser a bloqué l'autoplay avec son → muted + overlay
+          art.muted = true;
+          art.play().catch(() => {});
+          showUnmuteOverlay();
+        });
       }
     }
   });
@@ -395,18 +396,54 @@ function formatBitrate(bps) {
   // Save on pause/close
   function saveProgress() {
     if (art.currentTime > 0) {
-      navigator.sendBeacon(
-        '/videos/' + VIDEO_ID + '/progress',
-        new Blob([JSON.stringify({ progress: art.currentTime })], { type: 'application/json' })
-      );
+      // keepalive: true = survit à la fermeture de page, comme sendBeacon
+      // mais passe par l'intercepteur fetch → CSRF token auto-injecté
+      fetch('/videos/' + VIDEO_ID + '/progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ progress: art.currentTime }),
+        keepalive: true,
+      }).catch(() => {});
     }
   }
   art.on('video:pause', saveProgress);
   window.addEventListener('beforeunload', saveProgress);
 
-  // Persist playback rate changes
+  // Overlay "cliquer pour activer le son" quand le browser bloque l'autoplay
+  function showUnmuteOverlay() {
+    const container = document.getElementById('artplayer-app');
+    if (!container || document.getElementById('unmute-overlay')) return;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'unmute-overlay';
+    overlay.innerHTML =
+      '<div class="unmute-inner">' +
+        '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">' +
+          '<path d="M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.796 8.796 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06A8.99 8.99 0 0 0 17.73 18L19 19.27 20.27 18 5.27 3 4.27 3zM12 4 9.91 6.09 12 8.18V4z"/>' +
+        '</svg>' +
+        '<span>Cliquer pour activer le son</span>' +
+      '</div>';
+
+    overlay.addEventListener('click', () => {
+      art.muted = false;
+      art.volume = savedVolume;
+      overlay.remove();
+    });
+
+    container.style.position = 'relative';
+    container.appendChild(overlay);
+  }
+
+  // Persist playback rate + volume (jamais le muted — voir commentaire ci-dessus)
   art.on('video:ratechange', () => {
     localStorage.setItem('capsule_playback_rate', art.playbackRate);
+  });
+  art.on('video:volumechange', () => {
+    // On ne sauvegarde que le niveau de volume, pas l'état muted
+    // Ainsi un mute forcé par le browser ne pollue pas les préférences
+    if (art.volume > 0) {
+      localStorage.setItem('capsule_volume', art.volume);
+    }
   });
 
   // Auto-play next on video end
