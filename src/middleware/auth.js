@@ -12,7 +12,7 @@ function requireAdmin(req, res, next) {
     return res.redirect('/login');
   }
   if (req.session.user.role !== 'admin') {
-    return res.status(403).send('Accès refusé');
+    return res.status(403).send('Access denied');
   }
   next();
 }

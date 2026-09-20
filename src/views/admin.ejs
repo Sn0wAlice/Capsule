@@ -12,28 +12,29 @@
 <% } %>
 
 <div class="card">
-  <h2>Créer un utilisateur</h2>
+  <h2>Create a user</h2>
   <form method="POST" action="/admin/users/create" class="form-inline">
     <div class="form-group">
-      <input type="text" name="username" placeholder="Nom d'utilisateur" required minlength="2" maxlength="50">
+      <input type="text" name="username" placeholder="Username" required minlength="2" maxlength="50">
     </div>
     <div class="form-group">
-      <input type="password" name="password" placeholder="Mot de passe" required minlength="4">
+      <input type="password" name="password" placeholder="Password" required minlength="4">
     </div>
     <div class="form-group">
       <select name="role">
-        <option value="user">Utilisateur</option>
+        <option value="user">User</option>
         <option value="admin">Admin</option>
       </select>
     </div>
-    <button type="submit" class="btn btn-primary">Créer</button>
+    <button type="submit" class="btn btn-primary">Create</button>
   </form>
 </div>
 
 <%
 function formatSize(bytes) {
-  if (!bytes) return '—';
-  const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
+  bytes = Number(bytes);
+  if (!bytes || Number.isNaN(bytes)) return '—';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let i = 0;
   let size = Number(bytes);
   while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
@@ -49,16 +50,16 @@ function formatDurationShort(seconds) {
 %>
 
 <div class="card">
-  <h2>Utilisateurs (<%= users.length %>)</h2>
+  <h2>Users (<%= users.length %>)</h2>
   <table class="video-table">
     <thead>
       <tr>
-        <th>Nom d'utilisateur</th>
-        <th>Statut</th>
-        <th>Rôle</th>
-        <th>Bibliothèques</th>
-        <th>Dernière connexion</th>
-        <th>Inscrit le</th>
+        <th>Username</th>
+        <th>Status</th>
+        <th>Role</th>
+        <th>Libraries</th>
+        <th>Last sign-in</th>
+        <th>Registered</th>
         <th>Actions</th>
       </tr>
     </thead>
@@ -70,42 +71,42 @@ function formatDurationShort(seconds) {
             <% if (u.id !== user.id) { %>
               <form method="POST" action="/admin/users/<%= u.id %>/toggle-active" style="display:inline">
                 <button type="submit" class="btn btn-sm <%= u.is_active ? 'btn-active' : 'btn-danger' %>" style="min-width:70px">
-                  <%= u.is_active ? 'Actif' : 'Désactivé' %>
+                  <%= u.is_active ? 'Active' : 'Disabled' %>
                 </button>
               </form>
             <% } else { %>
-              <span class="badge badge-success">Actif</span>
+              <span class="badge badge-success">Active</span>
             <% } %>
           </td>
           <td>
             <% if (u.id !== user.id) { %>
               <form method="POST" action="/admin/users/<%= u.id %>/role" style="display:inline">
                 <select name="role" onchange="this.form.submit()" class="autoplay-select">
-                  <option value="user" <%= u.role === 'user' ? 'selected' : '' %>>Utilisateur</option>
+                  <option value="user" <%= u.role === 'user' ? 'selected' : '' %>>User</option>
                   <option value="admin" <%= u.role === 'admin' ? 'selected' : '' %>>Admin</option>
                 </select>
               </form>
             <% } else { %>
-              <span class="badge badge-accent">Admin (vous)</span>
+              <span class="badge badge-accent">Admin (you)</span>
             <% } %>
           </td>
           <td><%= u.library_count %></td>
-          <td class="muted"><%= u.last_login_at ? new Date(u.last_login_at).toLocaleString('fr-FR') : 'Jamais' %></td>
-          <td class="muted"><%= new Date(u.created_at).toLocaleDateString('fr-FR') %></td>
+          <td class="muted"><%= u.last_login_at ? new Date(u.last_login_at).toLocaleString('en-GB') : 'Never' %></td>
+          <td class="muted"><%= new Date(u.created_at).toLocaleDateString('en-GB') %></td>
           <td>
             <% if (u.id !== user.id) { %>
               <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
                 <form method="POST" action="/admin/users/<%= u.id %>/force-logout" style="display:inline">
-                  <button type="submit" class="btn btn-sm" title="Déconnecter l'utilisateur">Déconnecter</button>
+                  <button type="submit" class="btn btn-sm" title="Sign this user out">Sign out</button>
                 </form>
-                <button type="button" class="btn btn-sm" onclick="this.nextElementSibling.style.display='flex'">Mot de passe</button>
+                <button type="button" class="btn btn-sm" onclick="this.nextElementSibling.style.display='flex'">Password</button>
                 <form method="POST" action="/admin/users/<%= u.id %>/password" style="display:none;gap:0.5rem;align-items:center">
-                  <input type="password" name="password" placeholder="Nouveau mot de passe" required style="width:150px;padding:0.3rem 0.5rem;background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:0.8rem">
+                  <input type="password" name="password" placeholder="New password" required style="width:150px;padding:0.3rem 0.5rem;background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:0.8rem">
                   <button type="submit" class="btn btn-sm btn-primary">OK</button>
                 </form>
                 <form method="POST" action="/admin/users/<%= u.id %>/delete" style="display:inline"
-                      onsubmit="return confirm('Supprimer le compte de <%= u.username %> ? Toutes ses données seront effacées.')">
-                  <button type="submit" class="btn btn-sm btn-danger">Supprimer</button>
+                      onsubmit="return confirm('Delete <%= u.username %>&apos;s account? All of their data will be erased.')">
+                  <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                 </form>
               </div>
             <% } %>
@@ -116,19 +117,19 @@ function formatDurationShort(seconds) {
   </table>
 </div>
 
-<!-- Stats par utilisateur -->
+<!-- Per-user stats -->
 <div class="card">
-  <h2>Statistiques par utilisateur</h2>
+  <h2>Per-user statistics</h2>
   <table class="video-table">
     <thead>
       <tr>
-        <th>Utilisateur</th>
-        <th>Vidéos dans ses libs</th>
-        <th>Espace occupé</th>
-        <th>Vidéos regardées</th>
-        <th>Favoris</th>
+        <th>User</th>
+        <th>Videos in their libraries</th>
+        <th>Disk used</th>
+        <th>Videos watched</th>
+        <th>Favourites</th>
         <th>Playlists</th>
-        <th>Temps de visionnage</th>
+        <th>Watch time</th>
       </tr>
     </thead>
     <tbody>
@@ -151,18 +152,18 @@ function formatDurationShort(seconds) {
 
 <!-- Disk usage per library -->
 <div class="card">
-  <h2>Espace disque par bibliothèque</h2>
+  <h2>Disk usage by library</h2>
   <% if (libStats.length === 0) { %>
-    <p class="text-muted">Aucune bibliothèque.</p>
+    <p class="text-muted">No libraries.</p>
   <% } else { %>
     <table class="video-table">
       <thead>
         <tr>
-          <th>Bibliothèque</th>
-          <th>Propriétaire</th>
-          <th>Vidéos</th>
-          <th>Taille</th>
-          <th>Durée</th>
+          <th>Library</th>
+          <th>Owner</th>
+          <th>Videos</th>
+          <th>Size</th>
+          <th>Duration</th>
         </tr>
       </thead>
       <tbody>
@@ -180,9 +181,9 @@ function formatDurationShort(seconds) {
   <% } %>
 </div>
 
-<div class="card" style="margin-top: 2rem;">
+<div class="card">
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;">
-    <h2 style="margin:0;">File d'attente
+    <h2 style="margin:0;">Job queue
       <span class="text-muted" style="font-size:0.85rem; font-weight:400; margin-left:0.5rem;">
         <% for (const s of jobStats) { %>
           <span class="badge <%= s.status === 'processing' ? 'badge-accent' : s.status === 'pending' ? 'badge-info' : s.status === 'failed' ? 'badge-danger' : 'badge-success' %>"><%= s.count %> <%= s.status %></span>
@@ -194,28 +195,28 @@ function formatDurationShort(seconds) {
       <% const processingCount = jobStats.find(s => s.status === 'processing'); %>
       <% if (failedCount && failedCount.count > 0) { %>
         <form method="POST" action="/admin/jobs/requeue-failed" style="display:inline">
-          <button type="submit" class="btn btn-sm btn-primary" onclick="return confirm('Relancer les <%= failedCount.count %> job(s) en erreur ?')">Requeue failed (<%= failedCount.count %>)</button>
+          <button type="submit" class="btn btn-sm btn-primary" onclick="return confirm('Requeue the <%= failedCount.count %> failed job(s)?')">Requeue failed (<%= failedCount.count %>)</button>
         </form>
       <% } %>
       <% if (processingCount && processingCount.count > 0) { %>
         <form method="POST" action="/admin/jobs/requeue-stuck" style="display:inline">
-          <button type="submit" class="btn btn-sm" onclick="return confirm('Relancer les jobs bloqués en processing ?')">Requeue stuck</button>
+          <button type="submit" class="btn btn-sm" onclick="return confirm('Requeue the jobs stuck in processing?')">Requeue stuck</button>
         </form>
       <% } %>
     </div>
   </div>
   <% if (jobs.length === 0) { %>
-    <p class="text-muted">Aucun job en attente.</p>
+    <p class="text-muted">No jobs queued.</p>
   <% } else { %>
     <table class="video-table">
       <thead>
         <tr>
           <th>#</th>
-          <th>Vidéo</th>
-          <th>Bibliothèque</th>
-          <th>Statut</th>
-          <th>Créé</th>
-          <th>Erreur</th>
+          <th>Video</th>
+          <th>Library</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th>Error</th>
         </tr>
       </thead>
       <tbody>
@@ -227,7 +228,7 @@ function formatDurationShort(seconds) {
             <td>
               <span class="badge <%= j.status === 'processing' ? 'badge-accent' : j.status === 'pending' ? 'badge-info' : j.status === 'failed' ? 'badge-danger' : 'badge-success' %>"><%= j.status %></span>
             </td>
-            <td class="muted"><%= new Date(j.created_at).toLocaleString('fr-FR') %></td>
+            <td class="muted"><%= new Date(j.created_at).toLocaleString('en-GB') %></td>
             <td class="muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="<%= j.error || '' %>"><%= j.error || '—' %></td>
           </tr>
         <% } %>
@@ -236,10 +237,10 @@ function formatDurationShort(seconds) {
   <% } %>
 </div>
 
-<div class="card" style="margin-top: 2rem;">
-  <h2>Journal d'audit</h2>
+<div class="card">
+  <h2>Audit log</h2>
   <% if (auditLogs.length === 0) { %>
-    <p class="text-muted">Aucune action enregistrée.</p>
+    <p class="text-muted">No actions recorded.</p>
   <% } else { %>
     <table class="video-table">
       <thead>
@@ -247,13 +248,13 @@ function formatDurationShort(seconds) {
           <th>Date</th>
           <th>Admin</th>
           <th>Action</th>
-          <th>Détails</th>
+          <th>Details</th>
         </tr>
       </thead>
       <tbody>
         <% for (const log of auditLogs) { %>
           <tr>
-            <td class="muted"><%= new Date(log.created_at).toLocaleString('fr-FR') %></td>
+            <td class="muted"><%= new Date(log.created_at).toLocaleString('en-GB') %></td>
             <td><%= log.admin_username %></td>
             <td>
               <span class="badge <%= log.action === 'delete_user' ? 'badge-danger' : log.action === 'change_role' ? 'badge-accent' : log.action === 'reset_password' ? 'badge-info' : 'badge-success' %>"><%= log.action.replace(/_/g, ' ') %></span>

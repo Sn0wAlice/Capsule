@@ -2,8 +2,9 @@
 
 <%
 function formatSize(bytes) {
-  if (!bytes) return '—';
-  const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
+  bytes = Number(bytes);
+  if (!bytes || Number.isNaN(bytes)) return '—';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let i = 0;
   let size = bytes;
   while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
@@ -14,30 +15,30 @@ function formatSize(bytes) {
 <div class="page-header">
   <div>
     <h1><%= playlist.name %> <% if (playlist.is_smart) { %><span class="badge badge-accent">Smart</span><% } %></h1>
-    <p class="text-muted"><%= items.length %> vidéo(s)</p>
+    <p class="text-muted"><%= items.length %> video(s)</p>
   </div>
   <div class="page-actions">
     <% if (items.length > 0) { %>
-      <a href="/videos/<%= items[0].id %>?autoplay=1&playlist=<%= playlist.id %>" class="btn btn-sm btn-primary">Lire tout</a>
+      <a href="/videos/<%= items[0].id %>?autoplay=1&playlist=<%= playlist.id %>" class="btn btn-sm btn-primary">Play all</a>
     <% } %>
-    <a href="/playlists/<%= playlist.id %>/export.m3u" class="btn btn-sm playlist-export-btn" title="Exporter en M3U">&#8595; M3U</a>
+    <a href="/playlists/<%= playlist.id %>/export.m3u" class="btn btn-sm playlist-export-btn" title="Export as M3U">&#8595; M3U</a>
     <a href="/playlists" class="btn btn-sm">← Playlists</a>
     <form method="POST" action="/playlists/<%= playlist.id %>/delete" style="display:inline"
-          onsubmit="return confirm('Supprimer cette playlist ?')">
-      <button type="submit" class="btn btn-sm btn-danger">Supprimer</button>
+          onsubmit="return confirm('Delete this playlist?')">
+      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
     </form>
   </div>
 </div>
 
 <% if (items.length === 0) { %>
   <div class="empty-state">
-    <p>Cette playlist est vide. Ajoutez des vidéos depuis le lecteur.</p>
+    <p>This playlist is empty. Add videos from the player.</p>
   </div>
 <% } else { %>
   <div class="playlist-items" id="playlist-items">
     <% for (let i = 0; i < items.length; i++) { const v = items[i]; %>
       <div class="playlist-item" data-video-id="<%= v.id %>" data-position="<%= v.position %>">
-        <% if (!playlist.is_smart) { %><span class="playlist-handle" title="Glisser pour réordonner">⠿</span><% } %>
+        <% if (!playlist.is_smart) { %><span class="playlist-handle" title="Drag to reorder">⠿</span><% } %>
         <span class="playlist-index"><%= i + 1 %></span>
         <a href="/videos/<%= v.id %>" class="playlist-item-link">
           <div class="playlist-item-thumb">
@@ -52,7 +53,7 @@ function formatSize(bytes) {
         </a>
         <% if (!playlist.is_smart) { %>
         <button class="btn btn-sm btn-danger playlist-remove" data-video-id="<%= v.id %>"
-                title="Retirer de la playlist">&times;</button>
+                title="Remove from playlist">&times;</button>
         <% } %>
       </div>
     <% } %>

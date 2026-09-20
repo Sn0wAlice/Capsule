@@ -73,7 +73,7 @@ function createApp() {
       }
 
       res.render('dashboard', {
-        pageTitle: 'Bibliothèques',
+        pageTitle: 'Libraries',
         libraries: libraries || [],
         sharedLibraries: [],
         continueWatching: [],
@@ -93,13 +93,13 @@ function createApp() {
     try {
       const libIds = await getAccessibleLibraryIds(req.session.user.id, req.session.user.role);
       if (libIds.length === 0) {
-        return res.render('duplicates', { pageTitle: 'Doublons', groups: [] });
+        return res.render('duplicates', { pageTitle: 'Duplicates', groups: [] });
       }
       const [dupes] = await pool.query(
         'SELECT v.id, v.filename, v.size FROM videos v JOIN libraries l ON l.id = v.library_id WHERE l.id IN (?) LIMIT 0',
         [libIds]
       );
-      res.render('duplicates', { pageTitle: 'Doublons', groups: [] });
+      res.render('duplicates', { pageTitle: 'Duplicates', groups: [] });
     } catch (err) {
       res.status(500).send('duplicates error');
     }

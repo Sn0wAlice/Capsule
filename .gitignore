@@ -143,3 +143,7 @@ vite.config.ts.timestamp-*
 # Capsule
 media/
 mysql_data/
+
+# Le motif macOS "Icon?" (gitignore global) matche le dossier src/public/icons.
+# Sans cette exception, l'icône de l'app n'est pas versionnée et renvoie un 404.
+!src/public/icons/

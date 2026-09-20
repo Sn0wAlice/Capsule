@@ -1,19 +1,19 @@
 <%- include('partials/header') %>
 
 <div class="page-header">
-  <h1>Mes tags (<%= tags.length %>)</h1>
+  <h1>My tags (<%= tags.length %>)</h1>
 </div>
 
 <% if (tags.length === 0) { %>
   <div class="empty-state">
-    <p>Aucun tag. Ajoutez des tags depuis la page d'une vidéo.</p>
+    <p>No tags yet. Add them from a video's page.</p>
   </div>
 <% } else { %>
   <div class="tags-manage-list">
     <% for (const tag of tags) { %>
       <div class="tags-manage-row" data-id="<%= tag.id %>">
         <span class="tag tag-<%= tag.color %> tag-manage-preview"><%= tag.name %></span>
-        <span class="text-muted"><%= tag.video_count %> vidéo(s)</span>
+        <span class="text-muted"><%= tag.video_count %> video(s)</span>
         <div class="tags-manage-actions">
           <select class="autoplay-select tag-color-select" data-id="<%= tag.id %>">
             <% const colors = ['gray','red','orange','yellow','green','blue','purple','pink']; %>
@@ -21,8 +21,8 @@
               <option value="<%= c %>" <%= tag.color === c ? 'selected' : '' %>><%= c %></option>
             <% } %>
           </select>
-          <button class="btn btn-sm tag-rename-btn" data-id="<%= tag.id %>" data-name="<%= tag.name %>">Renommer</button>
-          <button class="btn btn-sm btn-danger tag-delete-btn" data-id="<%= tag.id %>" data-name="<%= tag.name %>" data-count="<%= tag.video_count %>">Supprimer</button>
+          <button class="btn btn-sm tag-rename-btn" data-id="<%= tag.id %>" data-name="<%= tag.name %>">Rename</button>
+          <button class="btn btn-sm btn-danger tag-delete-btn" data-id="<%= tag.id %>" data-name="<%= tag.name %>" data-count="<%= tag.video_count %>">Delete</button>
         </div>
       </div>
     <% } %>
@@ -35,7 +35,7 @@
     btn.addEventListener('click', () => {
       const id = btn.dataset.id;
       const current = btn.dataset.name;
-      const newName = prompt('Nouveau nom pour "' + current + '" :', current);
+      const newName = prompt('New name for "' + current + '":', current);
       if (!newName || newName.trim() === current) return;
       fetch('/tags/' + id + '/rename', {
         method: 'POST',
@@ -68,7 +68,7 @@
       const id = btn.dataset.id;
       const name = btn.dataset.name;
       const count = btn.dataset.count;
-      if (!confirm('Supprimer le tag "' + name + '" ?\nIl sera retiré de ' + count + ' vidéo(s).')) return;
+      if (!confirm('Delete the tag "' + name + '"?\nIt will be removed from ' + count + ' video(s).')) return;
       fetch('/tags/' + id + '/delete', {
         method: 'POST',
       }).then(r => r.json()).then(data => {

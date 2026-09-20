@@ -92,7 +92,7 @@ router.get('/', async (req, res) => {
     });
   } catch (err) {
     console.error('Admin error:', err);
-    res.render('admin', { pageTitle: 'Administration', users: [], libStats: [], jobs: [], jobStats: [], auditLogs: [], success: null, error: 'Erreur serveur' });
+    res.render('admin', { pageTitle: 'Administration', users: [], libStats: [], jobs: [], jobStats: [], auditLogs: [], success: null, error: 'Server error' });
   }
 });
 
@@ -103,10 +103,10 @@ router.post('/jobs/requeue-failed', async (req, res) => {
       "UPDATE jobs SET status = 'pending', error = NULL, started_at = NULL, finished_at = NULL WHERE status = 'failed'"
     );
     await auditLog(req.session.user, 'requeue_failed', 'jobs', null, `${result.affectedRows} job(s)`);
-    res.redirect(`/admin?success=${result.affectedRows} job(s) failed relancé(s)`);
+    res.redirect(`/admin?success=${result.affectedRows} failed job(s) requeued`);
   } catch (err) {
     console.error('Requeue failed error:', err);
-    res.redirect('/admin?error=Erreur lors du requeue');
+    res.redirect('/admin?error=Requeue failed');
   }
 });
 
@@ -117,10 +117,10 @@ router.post('/jobs/requeue-stuck', async (req, res) => {
       "UPDATE jobs SET status = 'pending', started_at = NULL WHERE status = 'processing' AND started_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE)"
     );
     await auditLog(req.session.user, 'requeue_stuck', 'jobs', null, `${result.affectedRows} job(s)`);
-    res.redirect(`/admin?success=${result.affectedRows} job(s) stuck relancé(s)`);
+    res.redirect(`/admin?success=${result.affectedRows} stuck job(s) requeued`);
   } catch (err) {
     console.error('Requeue stuck error:', err);
-    res.redirect('/admin?error=Erreur lors du requeue');
+    res.redirect('/admin?error=Requeue failed');
   }
 });
 
@@ -131,19 +131,19 @@ router.post('/users/create', async (req, res) => {
   const role = req.body.role === 'admin' ? 'admin' : 'user';
 
   if (!username || !password) {
-    return res.redirect('/admin?error=Nom d\'utilisateur et mot de passe requis');
+    return res.redirect('/admin?error=Username and password are required');
   }
   if (password.length < 4) {
-    return res.redirect('/admin?error=Mot de passe trop court (min 4)');
+    return res.redirect('/admin?error=Password too short (4 characters minimum)');
   }
   if (username.length < 2 || username.length > 50) {
-    return res.redirect('/admin?error=Nom d\'utilisateur entre 2 et 50 caractères');
+    return res.redirect('/admin?error=Username must be between 2 and 50 characters');
   }
 
   try {
     const [existing] = await pool.execute('SELECT id FROM users WHERE username = ?', [username]);
     if (existing.length > 0) {
-      return res.redirect('/admin?error=Ce nom d\'utilisateur existe déjà');
+      return res.redirect('/admin?error=That username already exists');
     }
 
     const hash = await bcrypt.hash(password, 10);
@@ -152,10 +152,10 @@ router.post('/users/create', async (req, res) => {
       [username, hash, role]
     );
     await auditLog(req.session.user, 'create_user', 'user', result.insertId, `${username} (${role})`);
-    res.redirect('/admin?success=Utilisateur ' + username + ' créé');
+    res.redirect('/admin?success=User ' + username + ' created');
   } catch (err) {
     console.error('Create user error:', err);
-    res.redirect('/admin?error=Erreur lors de la création');
+    res.redirect('/admin?error=Could not create the user');
   }
 });
 
@@ -163,11 +163,11 @@ router.post('/users/create', async (req, res) => {
 router.post('/users/:id/toggle-active', async (req, res) => {
   const targetId = parseInt(req.params.id);
   if (targetId === req.session.user.id) {
-    return res.redirect('/admin?error=Vous ne pouvez pas désactiver votre propre compte');
+    return res.redirect('/admin?error=You cannot disable your own account');
   }
   try {
     const [targetUser] = await pool.execute('SELECT username, is_active FROM users WHERE id = ?', [targetId]);
-    if (targetUser.length === 0) return res.redirect('/admin?error=Utilisateur introuvable');
+    if (targetUser.length === 0) return res.redirect('/admin?error=User not found');
     const newStatus = targetUser[0].is_active ? 0 : 1;
     await pool.execute('UPDATE users SET is_active = ? WHERE id = ?', [newStatus, targetId]);
     await auditLog(req.session.user, newStatus ? 'enable_user' : 'disable_user', 'user', targetId, targetUser[0].username);
@@ -175,10 +175,10 @@ router.post('/users/:id/toggle-active', async (req, res) => {
     if (!newStatus) {
       await pool.execute("DELETE FROM sessions WHERE JSON_EXTRACT(data, '$.user.id') = ?", [targetId]);
     }
-    res.redirect('/admin?success=Compte ' + (newStatus ? 'activé' : 'désactivé'));
+    res.redirect('/admin?success=Account ' + (newStatus ? 'enabled' : 'disabled'));
   } catch (err) {
     console.error('Toggle active error:', err);
-    res.redirect('/admin?error=Erreur lors du changement');
+    res.redirect('/admin?error=Update failed');
   }
 });
 
@@ -187,14 +187,14 @@ router.post('/users/:id/force-logout', async (req, res) => {
   const targetId = parseInt(req.params.id);
   try {
     const [targetUser] = await pool.execute('SELECT username FROM users WHERE id = ?', [targetId]);
-    if (targetUser.length === 0) return res.redirect('/admin?error=Utilisateur introuvable');
+    if (targetUser.length === 0) return res.redirect('/admin?error=User not found');
     // express-mysql-session stores data as JSON string in `data` column
     await pool.execute("DELETE FROM sessions WHERE data LIKE ?", ['%"id":' + targetId + '%']);
     await auditLog(req.session.user, 'force_logout', 'user', targetId, targetUser[0].username);
-    res.redirect('/admin?success=' + targetUser[0].username + ' déconnecté');
+    res.redirect('/admin?success=' + targetUser[0].username + ' signed out');
   } catch (err) {
     console.error('Force logout error:', err);
-    res.redirect('/admin?error=Erreur lors de la déconnexion');
+    res.redirect('/admin?error=Could not sign the user out');
   }
 });
 
@@ -202,17 +202,17 @@ router.post('/users/:id/force-logout', async (req, res) => {
 router.post('/users/:id/role', async (req, res) => {
   const targetId = parseInt(req.params.id);
   if (targetId === req.session.user.id) {
-    return res.redirect('/admin?error=Vous ne pouvez pas modifier votre propre rôle');
+    return res.redirect('/admin?error=You cannot change your own role');
   }
   const newRole = req.body.role === 'admin' ? 'admin' : 'user';
   try {
     const [targetUser] = await pool.execute('SELECT username FROM users WHERE id = ?', [targetId]);
     await pool.execute('UPDATE users SET role = ? WHERE id = ?', [newRole, targetId]);
     await auditLog(req.session.user, 'change_role', 'user', targetId, `${targetUser[0]?.username || targetId} → ${newRole}`);
-    res.redirect('/admin?success=Rôle modifié');
+    res.redirect('/admin?success=Role updated');
   } catch (err) {
     console.error('Role change error:', err);
-    res.redirect('/admin?error=Erreur lors du changement de rôle');
+    res.redirect('/admin?error=Could not change the role');
   }
 });
 
@@ -220,17 +220,17 @@ router.post('/users/:id/role', async (req, res) => {
 router.post('/users/:id/delete', async (req, res) => {
   const targetId = parseInt(req.params.id);
   if (targetId === req.session.user.id) {
-    return res.redirect('/admin?error=Vous ne pouvez pas supprimer votre propre compte');
+    return res.redirect('/admin?error=You cannot delete your own account');
   }
   try {
     const [targetUser] = await pool.execute('SELECT username FROM users WHERE id = ?', [targetId]);
     const deletedUsername = targetUser[0]?.username || `id:${targetId}`;
     await pool.execute('DELETE FROM users WHERE id = ?', [targetId]);
     await auditLog(req.session.user, 'delete_user', 'user', targetId, deletedUsername);
-    res.redirect('/admin?success=Compte supprimé');
+    res.redirect('/admin?success=Account deleted');
   } catch (err) {
     console.error('User delete error:', err);
-    res.redirect('/admin?error=Erreur lors de la suppression');
+    res.redirect('/admin?error=Could not delete');
   }
 });
 
@@ -238,7 +238,7 @@ router.post('/users/:id/delete', async (req, res) => {
 router.post('/users/:id/password', async (req, res) => {
   const password = req.body.password;
   if (!password || password.length < 4) {
-    return res.redirect('/admin?error=Mot de passe trop court (min 4)');
+    return res.redirect('/admin?error=Password too short (4 characters minimum)');
   }
   try {
     const hash = await bcrypt.hash(password, 10);
@@ -246,10 +246,10 @@ router.post('/users/:id/password', async (req, res) => {
     const [targetUser] = await pool.execute('SELECT username FROM users WHERE id = ?', [targetId]);
     await pool.execute('UPDATE users SET password_hash = ? WHERE id = ?', [hash, targetId]);
     await auditLog(req.session.user, 'reset_password', 'user', targetId, targetUser[0]?.username || `id:${targetId}`);
-    res.redirect('/admin?success=Mot de passe réinitialisé');
+    res.redirect('/admin?success=Password reset');
   } catch (err) {
     console.error('Password reset error:', err);
-    res.redirect('/admin?error=Erreur lors de la réinitialisation');
+    res.redirect('/admin?error=Could not reset the password');
   }
 });
 

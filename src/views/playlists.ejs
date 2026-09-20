@@ -5,41 +5,41 @@
 </div>
 
 <div class="card">
-  <h2>Créer une playlist</h2>
+  <h2>Create a playlist</h2>
   <form method="POST" action="/playlists/create" class="form-inline">
     <div class="form-group">
-      <input type="text" name="name" placeholder="Nom de la playlist" required>
+      <input type="text" name="name" placeholder="Playlist name" required>
     </div>
-    <button type="submit" class="btn btn-primary">Créer</button>
+    <button type="submit" class="btn btn-primary">Create</button>
   </form>
 </div>
 
 <div class="card">
-  <h2>Créer une playlist intelligente</h2>
+  <h2>Create a smart playlist</h2>
   <form method="POST" action="/playlists/create-smart" class="smart-playlist-form">
     <div class="form-row">
       <div class="form-group">
-        <label>Nom</label>
-        <input type="text" name="name" placeholder="Nom de la smart playlist" required>
+        <label>Name</label>
+        <input type="text" name="name" placeholder="Smart playlist name" required>
       </div>
       <div class="form-group">
         <label>Tag</label>
-        <input type="text" name="tag" placeholder="Filtrer par tag">
+        <input type="text" name="tag" placeholder="Filter by tag">
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label>Durée min (sec)</label>
-        <input type="number" name="minDuration" placeholder="ex: 300">
+        <label>Min duration (sec)</label>
+        <input type="number" name="minDuration" placeholder="e.g. 300">
       </div>
       <div class="form-group">
-        <label>Durée max (sec)</label>
-        <input type="number" name="maxDuration" placeholder="ex: 3600">
+        <label>Max duration (sec)</label>
+        <input type="number" name="maxDuration" placeholder="e.g. 3600">
       </div>
       <div class="form-group">
-        <label>Résolution</label>
+        <label>Resolution</label>
         <select name="resolution">
-          <option value="">Toutes</option>
+          <option value="">Any</option>
           <option value="4k">4K</option>
           <option value="1080p">1080p</option>
           <option value="720p">720p</option>
@@ -47,22 +47,22 @@
         </select>
       </div>
       <div class="form-group">
-        <label>Tri</label>
+        <label>Sort by</label>
         <select name="sort">
-          <option value="name">Nom</option>
+          <option value="name">Name</option>
           <option value="date">Date</option>
-          <option value="size">Taille</option>
-          <option value="duration">Durée</option>
+          <option value="size">Size</option>
+          <option value="duration">Duration</option>
         </select>
       </div>
     </div>
-    <button type="submit" class="btn btn-primary">Créer</button>
+    <button type="submit" class="btn btn-primary">Create</button>
   </form>
 </div>
 
 <% if (playlists.length === 0) { %>
   <div class="empty-state">
-    <p>Aucune playlist. Créez-en une pour organiser vos vidéos.</p>
+    <p>No playlists yet. Create one to organise your videos.</p>
   </div>
 <% } else { %>
   <div class="libraries-grid">
@@ -70,13 +70,13 @@
       <div class="card library-card">
         <div class="library-info">
           <h3><a href="/playlists/<%= pl.id %>"><%= pl.name %></a> <% if (pl.is_smart) { %><span class="badge badge-accent">Smart</span><% } %></h3>
-          <p class="library-count"><%= pl.item_count || 0 %> vidéo(s)</p>
+          <p class="library-count"><%= pl.item_count || 0 %> video(s)</p>
         </div>
         <div class="library-actions">
-          <a href="/playlists/<%= pl.id %>" class="btn btn-sm">Voir</a>
+          <a href="/playlists/<%= pl.id %>" class="btn btn-sm">Open</a>
           <form method="POST" action="/playlists/<%= pl.id %>/delete" style="display:inline"
-                onsubmit="return confirm('Supprimer cette playlist ?')">
-            <button type="submit" class="btn btn-sm btn-danger">Supprimer</button>
+                onsubmit="return confirm('Delete this playlist?')">
+            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
           </form>
         </div>
       </div>

@@ -2,8 +2,9 @@
 
 <%
 function formatSize(bytes) {
-  if (!bytes) return '—';
-  const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
+  bytes = Number(bytes);
+  if (!bytes || Number.isNaN(bytes)) return '—';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let i = 0;
   let size = bytes;
   while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
@@ -33,14 +34,14 @@ function buildUrl(overrides) {
 %>
 
 <div class="page-header">
-  <h1>Recherche<% if (query) { %> : "<%= query %>"<% } %></h1>
-  <p class="text-muted"><%= videos.length %> résultat(s)</p>
+  <h1>Search<% if (query) { %>: "<%= query %>"<% } %></h1>
+  <p class="text-muted"><%= videos.length %> result(s)</p>
 </div>
 
 <!-- Filter bar -->
 <div class="filter-bar">
   <div class="filter-group">
-    <span class="filter-label">Tags :</span>
+    <span class="filter-label">Tags</span>
     <% if (typeof userTags !== 'undefined') { %>
       <% for (const t of userTags) { %>
         <a href="<%= buildUrl({ tag: tagFilter === t.name ? '' : t.name }) %>"
@@ -51,7 +52,7 @@ function buildUrl(overrides) {
   </div>
 
   <div class="filter-group">
-    <span class="filter-label">Durée :</span>
+    <span class="filter-label">Duration</span>
     <a href="<%= buildUrl({ duration: durationFilter === 'short' ? '' : 'short' }) %>"
        class="filter-tag <%= durationFilter === 'short' ? 'active' : '' %>">&lt; 5 min</a>
     <a href="<%= buildUrl({ duration: durationFilter === 'medium' ? '' : 'medium' }) %>"
@@ -63,7 +64,7 @@ function buildUrl(overrides) {
   </div>
 
   <div class="filter-group">
-    <span class="filter-label">Résolution :</span>
+    <span class="filter-label">Resolution</span>
     <a href="<%= buildUrl({ resolution: resolutionFilter === '4k' ? '' : '4k' }) %>"
        class="filter-tag <%= resolutionFilter === '4k' ? 'active' : '' %>">4K</a>
     <a href="<%= buildUrl({ resolution: resolutionFilter === '1080p' ? '' : '1080p' }) %>"
@@ -75,7 +76,7 @@ function buildUrl(overrides) {
   </div>
 
   <div class="filter-group">
-    <span class="filter-label">Codec :</span>
+    <span class="filter-label">Codec</span>
     <a href="<%= buildUrl({ codec: codecFilter === 'h264' ? '' : 'h264' }) %>"
        class="filter-tag <%= codecFilter === 'h264' ? 'active' : '' %>">H.264</a>
     <a href="<%= buildUrl({ codec: codecFilter === 'hevc' ? '' : 'hevc' }) %>"
@@ -87,7 +88,7 @@ function buildUrl(overrides) {
   </div>
 
   <% if (tagFilter || durationFilter || resolutionFilter || codecFilter) { %>
-    <a href="/videos?q=<%= encodeURIComponent(query || '') %>" class="filter-clear">Effacer filtres</a>
+    <a href="/videos?q=<%= encodeURIComponent(query || '') %>" class="filter-clear">Clear filters</a>
   <% } %>
 </div>
 
@@ -115,7 +116,7 @@ function buildUrl(overrides) {
   </div>
 <% } else { %>
   <div class="empty-state">
-    <p>Aucune vidéo trouvée<% if (query) { %> pour "<%= query %>"<% } %>.</p>
+    <p>No videos found<% if (query) { %> for "<%= query %>"<% } %>.</p>
   </div>
 <% } %>
 

@@ -2,8 +2,9 @@
 
 <%
 function formatSize(bytes) {
-  if (!bytes) return '—';
-  const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
+  bytes = Number(bytes);
+  if (!bytes || Number.isNaN(bytes)) return '—';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let i = 0;
   let size = bytes;
   while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
@@ -23,39 +24,39 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
 <div class="page-header">
   <div>
     <h1><%= library.name %></h1>
-    <p class="text-muted"><%= library.path %> &mdash; <%= totalVideos %> vidéo(s)
+    <p class="text-muted"><%= library.path %> &mdash; <%= totalVideos %> video(s)
       <% if (permission === 'read') { %>
-        <span class="badge badge-info">Lecture seule</span>
+        <span class="badge badge-info">Read only</span>
       <% } else if (permission === 'write') { %>
-        <span class="badge badge-success">Lecture/Écriture</span>
+        <span class="badge badge-success">Read/Write</span>
       <% } %>
     </p>
   </div>
   <div class="page-actions">
     <% if (['owner','admin','write'].includes(permission)) { %>
     <form method="POST" action="/libraries/<%= library.id %>/scan" style="display:inline">
-      <button type="submit" class="btn btn-sm btn-primary">Scanner</button>
+      <button type="submit" class="btn btn-sm btn-primary">Scan</button>
     </form>
     <form method="POST" action="/libraries/<%= library.id %>/reset-previews" style="display:inline"
-          onsubmit="return confirm('Supprimer toutes les previews et relancer le traitement ?')">
-      <button type="submit" class="btn btn-sm">Regénérer previews</button>
+          onsubmit="return confirm('Delete every preview and run processing again?')">
+      <button type="submit" class="btn btn-sm">Rebuild previews</button>
     </form>
     <% } %>
-    <button class="btn btn-sm" id="bulk-toggle">Sélectionner</button>
-    <a href="/libraries/<%= library.id %>?view=folder" class="btn btn-sm <%= viewMode === 'folder' ? 'btn-active' : '' %>">Dossiers</a>
-    <a href="/libraries/<%= library.id %>?view=flat" class="btn btn-sm <%= viewMode === 'flat' ? 'btn-active' : '' %>">Tout</a>
+    <button class="btn btn-sm" id="bulk-toggle">Select</button>
+    <a href="/libraries/<%= library.id %>?view=folder" class="btn btn-sm <%= viewMode === 'folder' ? 'btn-active' : '' %>">Folders</a>
+    <a href="/libraries/<%= library.id %>?view=flat" class="btn btn-sm <%= viewMode === 'flat' ? 'btn-active' : '' %>">All</a>
     <% if (viewMode === 'flat') { %>
       <a href="/libraries/<%= library.id %>?view=flat&sort=<%= sort %>&order=<%= order %>&display=<%= displayMode %>&unwatched=<%= filterUnwatched ? '0' : '1' %>"
-         class="btn btn-sm <%= filterUnwatched ? 'btn-active' : '' %>">Non vues</a>
+         class="btn btn-sm <%= filterUnwatched ? 'btn-active' : '' %>">Unwatched</a>
     <% } %>
     <% if (viewMode === 'flat') { %>
     <div class="view-toggles">
       <a href="/libraries/<%= library.id %>?view=flat&sort=<%= sort %>&order=<%= order %>&display=grid"
-         class="view-toggle-btn <%= displayMode === 'grid' ? 'active' : '' %>" title="Grille">
+         class="view-toggle-btn <%= displayMode === 'grid' ? 'active' : '' %>" title="Grid">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
       </a>
       <a href="/libraries/<%= library.id %>?view=flat&sort=<%= sort %>&order=<%= order %>&display=list"
-         class="view-toggle-btn <%= displayMode === 'list' ? 'active' : '' %>" title="Liste">
+         class="view-toggle-btn <%= displayMode === 'list' ? 'active' : '' %>" title="List">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="4" width="18" height="2" rx="1"/><rect x="3" y="11" width="18" height="2" rx="1"/><rect x="3" y="18" width="18" height="2" rx="1"/></svg>
       </a>
     </div>
@@ -64,9 +65,9 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
 </div>
 
 <% if (scanned === 'bg') { %>
-  <div class="alert alert-success">Traitement lancé en arrière-plan.</div>
+  <div class="alert alert-success">Processing started in the background.</div>
 <% } else if (scanned) { %>
-  <div class="alert alert-success">Scan terminé : <%= scanned %> fichier(s) trouvé(s)</div>
+  <div class="alert alert-success">Scan complete: <%= scanned %> file(s) found</div>
 <% } %>
 <% if (error) { %>
   <div class="alert alert-error"><%= error %></div>
@@ -75,7 +76,7 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
 <!-- Scan progress bar -->
 <div class="scan-progress" id="scan-progress" style="display:none">
   <div class="scan-progress-info">
-    <span id="scan-progress-text">Traitement...</span>
+    <span id="scan-progress-text">Processing…</span>
     <span id="scan-progress-count"></span>
   </div>
   <div class="scan-progress-bar">
@@ -101,14 +102,14 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
         count.textContent = d.done + ' / ' + d.total;
         if (d.active) {
           el.style.display = '';
-          text.textContent = d.processing > 0 ? 'Traitement en cours...' : 'En attente...';
+          text.textContent = d.processing > 0 ? 'Processing…' : 'Queued…';
         } else if (d.failed > 0) {
           el.style.display = '';
-          text.textContent = 'Terminé (' + d.failed + ' erreur' + (d.failed > 1 ? 's' : '') + ')';
+          text.textContent = 'Done (' + d.failed + ' error' + (d.failed > 1 ? 's' : '') + ')';
           clearInterval(polling);
         } else {
           el.style.display = '';
-          text.textContent = 'Traitement terminé';
+          text.textContent = 'Processing complete';
           fill.style.width = '100%';
           clearInterval(polling);
           setTimeout(() => { el.style.display = 'none'; }, 5000);
@@ -125,7 +126,7 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
 <% if (viewMode === 'folder') { %>
   <!-- Breadcrumb -->
   <div class="breadcrumb">
-    <a href="/libraries/<%= library.id %>?view=folder">Racine</a>
+    <a href="/libraries/<%= library.id %>?view=folder">Root</a>
     <% if (currentPath) {
       const parts = currentPath.split('/');
       let accumulated = '';
@@ -151,7 +152,7 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
           </div>
           <div class="video-card-info">
             <span class="video-card-title"><%= folder %></span>
-            <span class="video-card-meta"><%= folderCounts[folder] || 0 %> vidéo(s)</span>
+            <span class="video-card-meta"><%= folderCounts[folder] || 0 %> video(s)</span>
           </div>
         </a>
       <% } %>
@@ -163,22 +164,22 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
   <!-- Sort controls (grid mode only) -->
   <% if (displayMode === 'grid') { %>
   <div class="sort-controls">
-    Trier par :
+    Sort by
     <a href="/libraries/<%= library.id %>?view=flat&sort=name&order=<%= sort === 'name' && order === 'asc' ? 'desc' : 'asc' %>&display=grid"
        class="<%= sort === 'name' ? 'active' : '' %>">
-      Nom <%= sort === 'name' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
+      Name <%= sort === 'name' ? (order === 'asc' ? '▲' : '▼') : '' %>
     </a>
     <a href="/libraries/<%= library.id %>?view=flat&sort=date&order=<%= sort === 'date' && order === 'desc' ? 'asc' : 'desc' %>&display=grid"
        class="<%= sort === 'date' ? 'active' : '' %>">
-      Date <%= sort === 'date' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
+      Date <%= sort === 'date' ? (order === 'asc' ? '▲' : '▼') : '' %>
     </a>
     <a href="/libraries/<%= library.id %>?view=flat&sort=size&order=<%= sort === 'size' && order === 'desc' ? 'asc' : 'desc' %>&display=grid<%= filterUnwatched ? '&unwatched=1' : '' %>"
        class="<%= sort === 'size' ? 'active' : '' %>">
-      Taille <%- sort === 'size' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
+      Size <%= sort === 'size' ? (order === 'asc' ? '▲' : '▼') : '' %>
     </a>
     <a href="/libraries/<%= library.id %>?view=flat&sort=views&order=<%= sort === 'views' && order === 'desc' ? 'asc' : 'desc' %>&display=grid<%= filterUnwatched ? '&unwatched=1' : '' %>"
        class="<%= sort === 'views' ? 'active' : '' %>">
-      Vues <%- sort === 'views' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
+      Views <%= sort === 'views' ? (order === 'asc' ? '▲' : '▼') : '' %>
     </a>
   </div>
   <% } %>
@@ -192,28 +193,24 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
       <thead>
         <tr>
           <th class="<%= sort === 'name' ? 'sorted' : '' %>">
-            <a href="/libraries/<%= library.id %>?view=flat&sort=name&order=<%= sort === 'name' && order === 'asc' ? 'desc' : 'asc' %>&display=list"
-               style="color:inherit;text-decoration:none">
-              Nom <%= sort === 'name' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
+            <a href="/libraries/<%= library.id %>?view=flat&sort=name&order=<%= sort === 'name' && order === 'asc' ? 'desc' : 'asc' %>&display=list">
+              Name <%= sort === 'name' ? (order === 'asc' ? '▲' : '▼') : '' %>
             </a>
           </th>
           <th class="<%= sort === 'size' ? 'sorted' : '' %>">
-            <a href="/libraries/<%= library.id %>?view=flat&sort=size&order=<%= sort === 'size' && order === 'desc' ? 'asc' : 'desc' %>&display=list"
-               style="color:inherit;text-decoration:none">
-              Taille <%= sort === 'size' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
+            <a href="/libraries/<%= library.id %>?view=flat&sort=size&order=<%= sort === 'size' && order === 'desc' ? 'asc' : 'desc' %>&display=list">
+              Size <%= sort === 'size' ? (order === 'asc' ? '▲' : '▼') : '' %>
             </a>
           </th>
-          <th>Durée</th>
+          <th>Duration</th>
           <th class="<%= sort === 'views' ? 'sorted' : '' %>">
-            <a href="/libraries/<%= library.id %>?view=flat&sort=views&order=<%= sort === 'views' && order === 'desc' ? 'asc' : 'desc' %>&display=list<%= filterUnwatched ? '&unwatched=1' : '' %>"
-               style="color:inherit;text-decoration:none">
-              Vues <%- sort === 'views' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
+            <a href="/libraries/<%= library.id %>?view=flat&sort=views&order=<%= sort === 'views' && order === 'desc' ? 'asc' : 'desc' %>&display=list<%= filterUnwatched ? '&unwatched=1' : '' %>">
+              Views <%= sort === 'views' ? (order === 'asc' ? '▲' : '▼') : '' %>
             </a>
           </th>
           <th class="<%= sort === 'date' ? 'sorted' : '' %>">
-            <a href="/libraries/<%= library.id %>?view=flat&sort=date&order=<%= sort === 'date' && order === 'desc' ? 'asc' : 'desc' %>&display=list"
-               style="color:inherit;text-decoration:none">
-              Date <%= sort === 'date' ? (order === 'asc' ? '&#9650;' : '&#9660;') : '' %>
+            <a href="/libraries/<%= library.id %>?view=flat&sort=date&order=<%= sort === 'date' && order === 'desc' ? 'asc' : 'desc' %>&display=list">
+              Date <%= sort === 'date' ? (order === 'asc' ? '▲' : '▼') : '' %>
             </a>
           </th>
         </tr>
@@ -234,7 +231,7 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
             <td class="muted"><%= formatSize(video.size) %></td>
             <td class="muted"><%= formatDuration(video.duration) %></td>
             <td class="muted"><%= video.view_count || 0 %></td>
-            <td class="muted"><%= new Date(video.updated_at || video.created_at).toLocaleDateString('fr-FR') %></td>
+            <td class="muted"><%= new Date(video.updated_at || video.created_at).toLocaleDateString('en-GB') %></td>
           </tr>
         <% } %>
       </tbody>
@@ -270,7 +267,7 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
   <% } %>
 <% } else if (folders.length === 0) { %>
   <div class="empty-state">
-    <p>Aucune vidéo trouvée. Lancez un scan.</p>
+    <p>No videos found. Run a scan.</p>
   </div>
 <% } %>
 
@@ -286,8 +283,9 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
   let done = false;
 
   function formatSize(bytes) {
-    if (!bytes) return '—';
-    const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
+    bytes = Number(bytes);
+    if (!bytes || Number.isNaN(bytes)) return '—';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
     let i = 0; let s = bytes;
     while (s >= 1024 && i < units.length - 1) { s /= 1024; i++; }
     return s.toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
@@ -316,7 +314,7 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
               '<td class="muted">' + formatSize(v.size) + '</td>' +
               '<td class="muted">' + formatDuration(v.duration) + '</td>' +
               '<td class="muted">' + (v.view_count || 0) + '</td>' +
-              '<td class="muted">' + new Date(v.updated_at || v.created_at).toLocaleDateString('fr-FR') + '</td>';
+              '<td class="muted">' + new Date(v.updated_at || v.created_at).toLocaleDateString('en-GB') + '</td>';
             container.appendChild(tr);
           } else {
             const card = document.createElement('a');
@@ -351,15 +349,15 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
 <!-- Bulk action bar (hidden by default) -->
 <div class="bulk-bar" id="bulk-bar" style="display:none">
   <div class="bulk-bar-info">
-    <span id="bulk-count">0</span> sélectionné(s)
+    <span id="bulk-count">0</span> selected
   </div>
   <div class="bulk-bar-actions">
     <button class="btn btn-sm" id="bulk-tag-btn">Tagger</button>
-    <button class="btn btn-sm" id="bulk-playlist-btn">Ajouter à playlist</button>
+    <button class="btn btn-sm" id="bulk-playlist-btn">Add to playlist</button>
     <% if (['owner','admin','write'].includes(permission)) { %>
-      <button class="btn btn-sm btn-danger" id="bulk-delete-btn">Supprimer</button>
+      <button class="btn btn-sm btn-danger" id="bulk-delete-btn">Delete</button>
     <% } %>
-    <button class="btn btn-sm" id="bulk-cancel">Annuler</button>
+    <button class="btn btn-sm" id="bulk-cancel">Cancel</button>
   </div>
 </div>
 
@@ -379,7 +377,7 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
   function enterBulkMode() {
     bulkMode = true;
     document.body.classList.add('bulk-mode');
-    toggleBtn.textContent = 'Annuler sélection';
+    toggleBtn.textContent = 'Cancel selection';
     // Add checkboxes to all video cards
     document.querySelectorAll('.video-card:not(.folder-card)').forEach(card => {
       const link = card.getAttribute('href');
@@ -425,7 +423,7 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
     bulkMode = false;
     selected.clear();
     document.body.classList.remove('bulk-mode');
-    toggleBtn.textContent = 'Sélectionner';
+    toggleBtn.textContent = 'Select';
     document.querySelectorAll('.video-card-checkbox').forEach(cb => cb.remove());
     document.querySelectorAll('.bulk-th').forEach(el => el.remove());
     // Remove extra td from table rows
@@ -470,7 +468,7 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
   // Bulk tag
   document.getElementById('bulk-tag-btn').addEventListener('click', async () => {
     if (selected.size === 0) return;
-    const tagName = prompt('Nom du tag :');
+    const tagName = prompt('Tag name:');
     if (!tagName) return;
     try {
       const resp = await fetch('/videos/bulk/tag', {
@@ -479,9 +477,9 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
         body: JSON.stringify({ videoIds: Array.from(selected), tagName })
       });
       const data = await resp.json();
-      if (data.ok) { alert(data.count + ' vidéo(s) taguée(s)'); exitBulkMode(); }
-      else alert('Erreur: ' + (data.error || 'inconnue'));
-    } catch { alert('Erreur réseau'); }
+      if (data.ok) { alert(data.count + ' video(s) tagged'); exitBulkMode(); }
+      else alert('Error: ' + (data.error || 'unknown'));
+    } catch { alert('Network error'); }
   });
 
   // Bulk playlist
@@ -491,21 +489,21 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
     try {
       const resp = await fetch('/playlists/api/list');
       const playlists = await resp.json();
-      if (playlists.length === 0) { alert('Aucune playlist. Créez-en une d\'abord.'); return; }
+      if (playlists.length === 0) { alert('No playlists. Create one first.'); return; }
       const choices = playlists.map((p, i) => (i + 1) + '. ' + p.name).join('\n');
-      const choice = prompt('Choisir une playlist :\n' + choices);
+      const choice = prompt('Choose a playlist:\n' + choices);
       if (!choice) return;
       const idx = parseInt(choice) - 1;
-      if (isNaN(idx) || idx < 0 || idx >= playlists.length) { alert('Choix invalide'); return; }
+      if (isNaN(idx) || idx < 0 || idx >= playlists.length) { alert('Invalid choice'); return; }
       const resp2 = await fetch('/videos/bulk/playlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ videoIds: Array.from(selected), playlistId: playlists[idx].id })
       });
       const data = await resp2.json();
-      if (data.ok) { alert(data.count + ' vidéo(s) ajoutée(s)'); exitBulkMode(); }
-      else alert('Erreur: ' + (data.error || 'inconnue'));
-    } catch { alert('Erreur réseau'); }
+      if (data.ok) { alert(data.count + ' video(s) added'); exitBulkMode(); }
+      else alert('Error: ' + (data.error || 'unknown'));
+    } catch { alert('Network error'); }
   });
 
   // Bulk delete
@@ -513,7 +511,7 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
   if (delBtn) {
     delBtn.addEventListener('click', async () => {
       if (selected.size === 0) return;
-      if (!confirm('Supprimer ' + selected.size + ' vidéo(s) de la base ? (les fichiers ne sont pas supprimés)')) return;
+      if (!confirm('Remove ' + selected.size + ' video(s) from the database? (the files are not deleted)')) return;
       try {
         const resp = await fetch('/videos/bulk/delete', {
           method: 'POST',
@@ -522,8 +520,8 @@ const displayMode = typeof listMode !== 'undefined' ? listMode : 'grid';
         });
         const data = await resp.json();
         if (data.ok) { location.reload(); }
-        else alert('Erreur: ' + (data.error || 'inconnue'));
-      } catch { alert('Erreur réseau'); }
+        else alert('Error: ' + (data.error || 'unknown'));
+      } catch { alert('Network error'); }
     });
   }
 })();

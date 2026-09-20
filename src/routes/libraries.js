@@ -22,17 +22,17 @@ router.get('/dashboard', async (req, res) => {
 router.post('/add', async (req, res) => {
   const { name, path: libPath } = req.body;
   if (!name || !libPath) {
-    return res.redirect('/dashboard?error=Nom et chemin requis');
+    return res.redirect('/dashboard?error=Name and path are required');
   }
 
   const resolvedPath = path.resolve(libPath);
   if (!fs.existsSync(resolvedPath)) {
-    return res.redirect('/dashboard?error=Le chemin n\'existe pas');
+    return res.redirect('/dashboard?error=That path does not exist');
   }
   // Block system-sensitive paths
   const blockedPaths = ['/', '/etc', '/root', '/var', '/usr', '/bin', '/sbin', '/sys', '/proc', '/dev'];
   if (blockedPaths.includes(resolvedPath) || resolvedPath.startsWith('/etc/') || resolvedPath.startsWith('/proc/')) {
-    return res.redirect('/dashboard?error=Ce chemin n\'est pas autorisé');
+    return res.redirect('/dashboard?error=That path is not allowed');
   }
 
   try {
@@ -44,7 +44,7 @@ router.post('/add', async (req, res) => {
     res.redirect('/dashboard');
   } catch (err) {
     console.error('Add library error:', err);
-    res.redirect('/dashboard?error=Erreur lors de l\'ajout');
+    res.redirect('/dashboard?error=Could not add the library');
   }
 });
 
@@ -53,14 +53,14 @@ router.post('/:id/delete', async (req, res) => {
   try {
     const access = await getLibraryAccess(req.session.user.id, req.params.id, req.session.user.role);
     if (access.permission !== 'owner' && access.permission !== 'admin') {
-      return res.redirect('/dashboard?error=Accès refusé');
+      return res.redirect('/dashboard?error=Access denied');
     }
     unwatchLibrary(parseInt(req.params.id));
     await pool.execute('DELETE FROM libraries WHERE id = ?', [req.params.id]);
     res.redirect('/dashboard');
   } catch (err) {
     console.error('Delete library error:', err);
-    res.redirect('/dashboard?error=Erreur lors de la suppression');
+    res.redirect('/dashboard?error=Could not delete');
   }
 });
 
@@ -69,23 +69,23 @@ router.post('/:id/edit', async (req, res) => {
   try {
     const access = await getLibraryAccess(req.session.user.id, req.params.id, req.session.user.role);
     if (access.permission !== 'owner' && access.permission !== 'admin') {
-      return res.redirect('/dashboard?error=Accès refusé');
+      return res.redirect('/dashboard?error=Access denied');
     }
 
     const name = (req.body.name || '').trim();
     const newPath = (req.body.path || '').trim();
-    if (!name) return res.redirect('/dashboard?error=Nom requis');
+    if (!name) return res.redirect('/dashboard?error=Name is required');
 
     const updates = { name };
 
     if (newPath) {
       const resolvedPath = path.resolve(newPath);
       if (!fs.existsSync(resolvedPath)) {
-        return res.redirect('/dashboard?error=Le chemin n\'existe pas');
+        return res.redirect('/dashboard?error=That path does not exist');
       }
       const blockedPaths = ['/', '/etc', '/root', '/var', '/usr', '/bin', '/sbin', '/sys', '/proc', '/dev'];
       if (blockedPaths.includes(resolvedPath) || resolvedPath.startsWith('/etc/') || resolvedPath.startsWith('/proc/')) {
-        return res.redirect('/dashboard?error=Ce chemin n\'est pas autorisé');
+        return res.redirect('/dashboard?error=That path is not allowed');
       }
       updates.path = newPath;
 
@@ -101,10 +101,10 @@ router.post('/:id/edit', async (req, res) => {
       await pool.execute('UPDATE libraries SET name = ? WHERE id = ?', [name, req.params.id]);
     }
 
-    res.redirect('/dashboard?success=Bibliothèque mise à jour');
+    res.redirect('/dashboard?success=Library updated');
   } catch (err) {
     console.error('Edit library error:', err);
-    res.redirect('/dashboard?error=Erreur lors de la mise à jour');
+    res.redirect('/dashboard?error=Could not update the library');
   }
 });
 
@@ -113,7 +113,7 @@ router.post('/:id/scan', async (req, res) => {
   try {
     const access = await getLibraryAccess(req.session.user.id, req.params.id, req.session.user.role);
     if (!access.allowed || !canWrite(access.permission)) {
-      return res.redirect('/dashboard?error=Accès refusé');
+      return res.redirect('/dashboard?error=Access denied');
     }
     // Fire and forget — don't await
     scanLibrary(parseInt(req.params.id)).catch(err => {
@@ -122,7 +122,7 @@ router.post('/:id/scan', async (req, res) => {
     res.redirect(`/libraries/${req.params.id}?scanned=bg`);
   } catch (err) {
     console.error('Scan error:', err);
-    res.redirect(`/libraries/${req.params.id}?error=Erreur lors du scan`);
+    res.redirect(`/libraries/${req.params.id}?error=Scan failed`);
   }
 });
 
@@ -168,7 +168,7 @@ router.get('/:id/shares', async (req, res) => {
   try {
     const access = await getLibraryAccess(req.session.user.id, req.params.id, req.session.user.role);
     if (access.permission !== 'owner' && access.permission !== 'admin') {
-      return res.status(403).json({ error: 'Accès refusé' });
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     const [shares] = await pool.execute(
@@ -190,7 +190,7 @@ router.get('/:id/shares', async (req, res) => {
     res.json({ shares, users: allUsers });
   } catch (err) {
     console.error('Get shares error:', err);
-    res.status(500).json({ error: 'Erreur serveur' });
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
@@ -199,7 +199,7 @@ router.post('/:id/shares', async (req, res) => {
   try {
     const access = await getLibraryAccess(req.session.user.id, req.params.id, req.session.user.role);
     if (access.permission !== 'owner' && access.permission !== 'admin') {
-      return res.status(403).json({ error: 'Accès refusé' });
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     const { user_id, permission } = req.body;
@@ -207,7 +207,7 @@ router.post('/:id/shares', async (req, res) => {
 
     const [lib] = await pool.execute('SELECT user_id FROM libraries WHERE id = ?', [req.params.id]);
     if (parseInt(user_id) === lib[0].user_id) {
-      return res.status(400).json({ error: 'Le propriétaire a déjà accès' });
+      return res.status(400).json({ error: 'The owner already has access' });
     }
 
     await pool.execute(
@@ -219,7 +219,7 @@ router.post('/:id/shares', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error('Add share error:', err);
-    res.status(500).json({ error: 'Erreur serveur' });
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
@@ -228,13 +228,13 @@ router.post('/:id/shares/:shareId/delete', async (req, res) => {
   try {
     const access = await getLibraryAccess(req.session.user.id, req.params.id, req.session.user.role);
     if (access.permission !== 'owner' && access.permission !== 'admin') {
-      return res.status(403).json({ error: 'Accès refusé' });
+      return res.status(403).json({ error: 'Access denied' });
     }
     await pool.execute('DELETE FROM library_shares WHERE id = ? AND library_id = ?', [req.params.shareId, req.params.id]);
     res.json({ ok: true });
   } catch (err) {
     console.error('Remove share error:', err);
-    res.status(500).json({ error: 'Erreur serveur' });
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
@@ -244,7 +244,7 @@ router.post('/:id/reset-previews', async (req, res) => {
   try {
     const access = await getLibraryAccess(req.session.user.id, libraryId, req.session.user.role);
     if (!access.allowed || !canWrite(access.permission)) {
-      return res.redirect('/dashboard?error=Accès refusé');
+      return res.redirect('/dashboard?error=Access denied');
     }
 
     // Fire and forget
@@ -311,7 +311,7 @@ router.post('/:id/reset-previews', async (req, res) => {
     res.redirect(`/libraries/${libraryId}?scanned=bg`);
   } catch (err) {
     console.error('Reset previews error:', err);
-    res.redirect(`/libraries/${libraryId}?error=Erreur lors du reset`);
+    res.redirect(`/libraries/${libraryId}?error=Reset failed`);
   }
 });
 
@@ -438,7 +438,7 @@ router.get('/:id', async (req, res) => {
     });
   } catch (err) {
     console.error('Library view error:', err);
-    res.redirect('/dashboard?error=Erreur');
+    res.redirect('/dashboard?error=Server error');
   }
 });
 

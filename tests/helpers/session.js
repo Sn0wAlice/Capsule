@@ -8,7 +8,6 @@ const DEFAULT_USER = {
   id: 1,
   username: 'testuser',
   role: 'user',
-  theme: 'dark',
   default_view: 'grid',
 };
 
@@ -16,7 +15,6 @@ const ADMIN_USER = {
   id: 2,
   username: 'admin',
   role: 'admin',
-  theme: 'dark',
   default_view: 'grid',
 };
 

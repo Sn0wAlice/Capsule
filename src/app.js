@@ -45,7 +45,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
   etag: true,
 }));
 
-// ArtPlayer servi localement depuis node_modules (évite dépendance CDN)
+// ArtPlayer served locally from node_modules (avoids a CDN dependency)
 app.use('/vendor/artplayer', express.static(
   path.join(__dirname, '../node_modules/artplayer/dist'),
   { maxAge: '30d', etag: true, immutable: true }
@@ -80,7 +80,7 @@ app.use(csrfProtection);
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 15, // 15 attempts per window
-  message: 'Trop de tentatives, réessayez dans 15 minutes.',
+  message: 'Too many attempts, try again in 15 minutes.',
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -117,7 +117,7 @@ const { requireAuth, getAccessibleLibraryIds } = require('./middleware/auth');
 app.get('/duplicates', requireAuth, async (req, res) => {
   try {
     const libIds = await getAccessibleLibraryIds(req.session.user.id, req.session.user.role);
-    if (libIds.length === 0) return res.render('duplicates', { pageTitle: 'Doublons', groups: [] });
+    if (libIds.length === 0) return res.render('duplicates', { pageTitle: 'Duplicates', groups: [] });
 
     const [dupes] = await pool.query(
       `SELECT v.id, v.filename, v.title, v.size, v.filepath, l.name as library_name,
@@ -148,10 +148,10 @@ app.get('/duplicates', requireAuth, async (req, res) => {
       current.videos.push(row);
     }
 
-    res.render('duplicates', { pageTitle: 'Doublons', groups });
+    res.render('duplicates', { pageTitle: 'Duplicates', groups });
   } catch (err) {
     console.error('Duplicates error:', err);
-    res.render('duplicates', { pageTitle: 'Doublons', groups: [] });
+    res.render('duplicates', { pageTitle: 'Duplicates', groups: [] });
   }
 });
 
@@ -275,7 +275,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     }
 
     res.render('dashboard', {
-      pageTitle: 'Bibliothèques',
+      pageTitle: 'Libraries',
       libraries,
       sharedLibraries,
       continueWatching,
@@ -287,7 +287,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('Dashboard error:', err);
-    res.render('dashboard', { pageTitle: 'Bibliothèques', libraries: [], sharedLibraries: [], continueWatching: [], history: [], favorites: [], watchlist: [], stats: { totalVideos: 0, totalSize: 0, totalDuration: 0 }, error: 'Erreur serveur' });
+    res.render('dashboard', { pageTitle: 'Libraries', libraries: [], sharedLibraries: [], continueWatching: [], history: [], favorites: [], watchlist: [], stats: { totalVideos: 0, totalSize: 0, totalDuration: 0 }, error: 'Server error' });
   }
 });
 

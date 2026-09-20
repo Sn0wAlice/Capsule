@@ -48,38 +48,6 @@ describe('GET /settings', () => {
   });
 });
 
-// ── POST /settings/theme ──────────────────────────────────────────────────────
-
-describe('POST /settings/theme', () => {
-  test('updates theme to dark', async () => {
-    pool.execute.mockResolvedValueOnce([{ affectedRows: 1 }]);
-    const agent = await loginAs(app);
-    const res = await agent.post('/settings/theme').send({ theme: 'dark' });
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toEqual({ ok: true, theme: 'dark' });
-  });
-
-  test('updates theme to light', async () => {
-    pool.execute.mockResolvedValueOnce([{ affectedRows: 1 }]);
-    const agent = await loginAs(app);
-    const res = await agent.post('/settings/theme').send({ theme: 'light' });
-    expect(res.statusCode).toBe(200);
-    expect(res.body.theme).toBe('light');
-  });
-
-  test('defaults to dark for invalid theme value', async () => {
-    pool.execute.mockResolvedValueOnce([{ affectedRows: 1 }]);
-    const agent = await loginAs(app);
-    const res = await agent.post('/settings/theme').send({ theme: 'invalid' });
-    expect(res.body.theme).toBe('dark');
-  });
-
-  test('rejects unauthenticated request', async () => {
-    const res = await request(app).post('/settings/theme').send({ theme: 'dark' });
-    expect(res.statusCode).toBe(302);
-  });
-});
-
 // ── POST /settings/default-view ───────────────────────────────────────────────
 
 describe('POST /settings/default-view', () => {

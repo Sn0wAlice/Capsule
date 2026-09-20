@@ -9,8 +9,8 @@ const SUBTITLE_EXTENSIONS = new Set(['.srt', '.vtt']);
 function parseSubtitleMeta(subFilename, videoBasename) {
   const noExt = path.basename(subFilename, path.extname(subFilename));
   const suffix = noExt.slice(videoBasename.length).replace(/^[._-]/, '');
-  const lang = suffix || 'fr';
-  const labels = { fr: 'Français', en: 'English', es: 'Español', de: 'Deutsch', it: 'Italiano', pt: 'Português', ja: '日本語', zh: '中文', ar: 'العربية' };
+  const lang = suffix || 'en';
+  const labels = { fr: 'French', en: 'English', es: 'Spanish', de: 'German', it: 'Italian', pt: 'Portuguese', ja: 'Japanese', zh: 'Chinese', ar: 'Arabic' };
   return { language: lang, label: labels[lang] || lang.toUpperCase() };
 }
 
@@ -247,6 +247,7 @@ async function removeSingleFile(libraryId, libraryPath, filePath) {
 
 module.exports = {
   scanLibrary,
+  parseSubtitleMeta,
   indexSingleFile,
   removeSingleFile,
   indexSubtitlesForVideo,

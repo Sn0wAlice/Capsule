@@ -2,8 +2,9 @@
 
 <%
 function formatSize(bytes) {
-  if (!bytes) return '—';
-  const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
+  bytes = Number(bytes);
+  if (!bytes || Number.isNaN(bytes)) return '—';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let i = 0;
   let size = bytes;
   while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
@@ -30,22 +31,22 @@ function formatDurationLong(seconds) {
 %>
 
 <div class="page-header">
-  <h1>Bibliothèques</h1>
+  <h1>Libraries</h1>
 </div>
 
 <% if (stats.totalVideos > 0) { %>
 <div class="dashboard-stats">
   <div class="stat-card">
     <span class="stat-value"><%= stats.totalVideos %></span>
-    <span class="stat-label">vidéos</span>
+    <span class="stat-label">videos</span>
   </div>
   <div class="stat-card">
     <span class="stat-value"><%= formatSize(stats.totalSize) %></span>
-    <span class="stat-label">espace total</span>
+    <span class="stat-label">total size</span>
   </div>
   <div class="stat-card">
     <span class="stat-value"><%= formatDurationLong(stats.totalDuration) %></span>
-    <span class="stat-label">durée totale</span>
+    <span class="stat-label">total runtime</span>
   </div>
 </div>
 <% } %>
@@ -57,7 +58,7 @@ function formatDurationLong(seconds) {
 <!-- Continue watching -->
 <% if (continueWatching.length > 0) { %>
   <div class="dashboard-section">
-    <h2 class="section-title">Continuer à regarder</h2>
+    <h2 class="section-title">Continue watching</h2>
     <div class="video-grid">
       <% for (const v of continueWatching) { %>
         <a href="/videos/<%= v.id %>" class="video-card">
@@ -85,7 +86,7 @@ function formatDurationLong(seconds) {
 <!-- Recent history -->
 <% if (history.length > 0) { %>
   <div class="dashboard-section">
-    <h2 class="section-title">Historique récent</h2>
+    <h2 class="section-title">Recently watched</h2>
     <div class="video-grid">
       <% for (const v of history) { %>
         <a href="/videos/<%= v.id %>" class="video-card">
@@ -110,7 +111,7 @@ function formatDurationLong(seconds) {
 <!-- Favorites -->
 <% if (favorites.length > 0) { %>
   <div class="dashboard-section">
-    <h2 class="section-title">Favoris</h2>
+    <h2 class="section-title">Favourites</h2>
     <div class="video-grid">
       <% for (const v of favorites) { %>
         <a href="/videos/<%= v.id %>" class="video-card">
@@ -135,7 +136,7 @@ function formatDurationLong(seconds) {
 <!-- Watchlist -->
 <% if (watchlist.length > 0) { %>
   <div class="dashboard-section">
-    <h2 class="section-title">A regarder</h2>
+    <h2 class="section-title">Watchlist</h2>
     <div class="video-grid">
       <% for (const v of watchlist) { %>
         <a href="/videos/<%= v.id %>" class="video-card">
@@ -159,28 +160,28 @@ function formatDurationLong(seconds) {
 
 <!-- Add library -->
 <div class="card">
-  <h2>Ajouter une bibliothèque</h2>
+  <h2>Add a library</h2>
   <form method="POST" action="/libraries/add" class="form-inline">
     <div class="form-group">
-      <input type="text" name="name" placeholder="Nom de la bibliothèque" required>
+      <input type="text" name="name" placeholder="Library name" required>
     </div>
     <div class="form-group">
-      <input type="text" name="path" placeholder="Chemin du dossier (ex: /media/films)" required>
+      <input type="text" name="path" placeholder="Folder path (e.g. /media/movies)" required>
     </div>
-    <button type="submit" class="btn btn-primary">Ajouter</button>
+    <button type="submit" class="btn btn-primary">Add</button>
   </form>
 </div>
 
 <!-- My libraries -->
 <% if (libraries.length === 0 && sharedLibraries.length === 0) { %>
   <div class="empty-state">
-    <p>Aucune bibliothèque. Ajoutez-en une pour commencer.</p>
+    <p>No libraries yet. Add one to get started.</p>
   </div>
 <% } %>
 
 <% if (libraries.length > 0) { %>
   <div class="dashboard-section">
-    <h2 class="section-title">Mes bibliothèques</h2>
+    <h2 class="section-title">My libraries</h2>
     <div class="libraries-grid">
       <% for (const lib of libraries) { %>
         <div class="card library-card">
@@ -192,18 +193,18 @@ function formatDurationLong(seconds) {
           <div class="library-info">
             <h3><a href="/libraries/<%= lib.id %>"><%= lib.name %></a></h3>
             <p class="library-path"><%= lib.path %></p>
-            <p class="library-count"><%= lib.video_count || 0 %> vidéo(s) <% if (!lib.video_count) { %><span class="badge badge-info">Pas encore scanné</span><% } %></p>
+            <p class="library-count"><%= lib.video_count || 0 %> video(s) <% if (!lib.video_count) { %><span class="badge badge-info">Not scanned yet</span><% } %></p>
           </div>
           <div class="library-actions">
-            <a href="/libraries/<%= lib.id %>" class="btn btn-sm">Parcourir</a>
+            <a href="/libraries/<%= lib.id %>" class="btn btn-sm">Browse</a>
             <form method="POST" action="/libraries/<%= lib.id %>/scan" style="display:inline">
-              <button type="submit" class="btn btn-sm btn-primary">Scanner</button>
+              <button type="submit" class="btn btn-sm btn-primary">Scan</button>
             </form>
-            <button type="button" class="btn btn-sm" onclick="openEditModal(<%= lib.id %>, '<%= lib.name.replace(/'/g, "\\'") %>', '<%= lib.path.replace(/'/g, "\\'") %>')">Modifier</button>
-            <button type="button" class="btn btn-sm" onclick="openShareModal(<%= lib.id %>, '<%= lib.name.replace(/'/g, "\\'") %>')">Partager</button>
+            <button type="button" class="btn btn-sm" onclick="openEditModal(<%= lib.id %>, '<%= lib.name.replace(/'/g, "\\'") %>', '<%= lib.path.replace(/'/g, "\\'") %>')">Edit</button>
+            <button type="button" class="btn btn-sm" onclick="openShareModal(<%= lib.id %>, '<%= lib.name.replace(/'/g, "\\'") %>')">Share</button>
             <form method="POST" action="/libraries/<%= lib.id %>/delete" style="display:inline"
-                  onsubmit="return confirm('Supprimer cette bibliothèque ?')">
-              <button type="submit" class="btn btn-sm btn-danger">Supprimer</button>
+                  onsubmit="return confirm('Delete this library?')">
+              <button type="submit" class="btn btn-sm btn-danger">Delete</button>
             </form>
           </div>
         </div>
@@ -215,7 +216,7 @@ function formatDurationLong(seconds) {
 <!-- Shared with me -->
 <% if (sharedLibraries.length > 0) { %>
   <div class="dashboard-section">
-    <h2 class="section-title">Partagées avec moi</h2>
+    <h2 class="section-title">Shared with me</h2>
     <div class="libraries-grid">
       <% for (const lib of sharedLibraries) { %>
         <div class="card library-card">
@@ -226,14 +227,14 @@ function formatDurationLong(seconds) {
           <% } %>
           <div class="library-info">
             <h3><a href="/libraries/<%= lib.id %>"><%= lib.name %></a></h3>
-            <p class="library-path"><%= lib.owner_name %> &mdash; <span class="badge <%= lib.permission === 'write' ? 'badge-success' : 'badge-info' %>"><%= lib.permission === 'write' ? 'Lecture/Écriture' : 'Lecture' %></span></p>
-            <p class="library-count"><%= lib.video_count || 0 %> vidéo(s)</p>
+            <p class="library-path"><%= lib.owner_name %> &mdash; <span class="badge <%= lib.permission === 'write' ? 'badge-success' : 'badge-info' %>"><%= lib.permission === 'write' ? 'Read/Write' : 'Read' %></span></p>
+            <p class="library-count"><%= lib.video_count || 0 %> video(s)</p>
           </div>
           <div class="library-actions">
-            <a href="/libraries/<%= lib.id %>" class="btn btn-sm">Parcourir</a>
+            <a href="/libraries/<%= lib.id %>" class="btn btn-sm">Browse</a>
             <% if (lib.permission === 'write') { %>
               <form method="POST" action="/libraries/<%= lib.id %>/scan" style="display:inline">
-                <button type="submit" class="btn btn-sm btn-primary">Scanner</button>
+                <button type="submit" class="btn btn-sm btn-primary">Scan</button>
               </form>
             <% } %>
           </div>
@@ -247,21 +248,21 @@ function formatDurationLong(seconds) {
 <div class="modal-overlay" id="edit-modal" style="display:none">
   <div class="modal-content">
     <div class="modal-header">
-      <h2>Modifier la bibliothèque</h2>
+      <h2>Edit library</h2>
       <button class="modal-close" onclick="closeEditModal()">&times;</button>
     </div>
     <div class="modal-body">
       <form method="POST" id="edit-lib-form" action="">
         <div class="form-group" style="margin-bottom:0.75rem">
-          <label style="display:block;margin-bottom:0.25rem;font-size:0.85rem;opacity:0.7">Nom</label>
+          <label style="display:block;margin-bottom:0.25rem;font-size:0.85rem;opacity:0.7">Name</label>
           <input type="text" name="name" id="edit-lib-name" required style="width:100%">
         </div>
         <div class="form-group" style="margin-bottom:1rem">
-          <label style="display:block;margin-bottom:0.25rem;font-size:0.85rem;opacity:0.7">Chemin (laisser vide pour ne pas changer)</label>
-          <input type="text" name="path" id="edit-lib-path" placeholder="Nouveau chemin..." style="width:100%">
+          <label style="display:block;margin-bottom:0.25rem;font-size:0.85rem;opacity:0.7">Path (leave empty to keep it)</label>
+          <input type="text" name="path" id="edit-lib-path" placeholder="New path…" style="width:100%">
         </div>
-        <button type="submit" class="btn btn-primary">Enregistrer</button>
-        <button type="button" class="btn" onclick="closeEditModal()">Annuler</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+        <button type="button" class="btn" onclick="closeEditModal()">Cancel</button>
       </form>
     </div>
   </div>
@@ -271,20 +272,20 @@ function formatDurationLong(seconds) {
 <div class="modal-overlay" id="share-modal" style="display:none">
   <div class="modal-content">
     <div class="modal-header">
-      <h2>Partager : <span id="share-lib-name"></span></h2>
+      <h2>Share: <span id="share-lib-name"></span></h2>
       <button class="modal-close" onclick="closeShareModal()">&times;</button>
     </div>
     <div class="modal-body">
       <div id="share-list"></div>
       <div class="share-add-form">
         <select id="share-user-select">
-          <option value="">Choisir un utilisateur...</option>
+          <option value="">Choose a user…</option>
         </select>
         <select id="share-perm-select">
-          <option value="read">Lecture</option>
-          <option value="write">Lecture/Écriture</option>
+          <option value="read">Read</option>
+          <option value="write">Read/Write</option>
         </select>
-        <button class="btn btn-primary btn-sm" id="share-add-btn">Ajouter</button>
+        <button class="btn btn-primary btn-sm" id="share-add-btn">Add</button>
       </div>
     </div>
   </div>
@@ -336,11 +337,11 @@ function loadShares(libId) {
 
         const badgeSpan = document.createElement('span');
         badgeSpan.className = 'badge ' + (s.permission === 'write' ? 'badge-success' : 'badge-info');
-        badgeSpan.textContent = s.permission === 'write' ? 'Lecture/Écriture' : 'Lecture';
+        badgeSpan.textContent = s.permission === 'write' ? 'Read/Write' : 'Read';
 
         const removeBtn = document.createElement('button');
         removeBtn.className = 'btn btn-sm btn-danger';
-        removeBtn.textContent = 'Retirer';
+        removeBtn.textContent = 'Remove';
         removeBtn.addEventListener('click', () => removeShare(libId, s.id));
 
         div.appendChild(nameSpan);
@@ -351,7 +352,7 @@ function loadShares(libId) {
       if (data.shares.length === 0) {
         const p = document.createElement('p');
         p.className = 'text-muted';
-        p.textContent = 'Aucun partage';
+        p.textContent = 'Not shared with anyone';
         list.appendChild(p);
       }
 
@@ -360,7 +361,7 @@ function loadShares(libId) {
       select.textContent = '';
       const defaultOpt = document.createElement('option');
       defaultOpt.value = '';
-      defaultOpt.textContent = 'Choisir un utilisateur...';
+      defaultOpt.textContent = 'Choose a user…';
       select.appendChild(defaultOpt);
       for (const u of data.users) {
         if (!sharedUserIds.has(u.id)) {

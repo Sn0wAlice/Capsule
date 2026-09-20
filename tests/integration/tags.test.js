@@ -99,7 +99,7 @@ describe('POST /tags/:id/rename', () => {
     const res = await agent.post('/tags/1/rename').send({ name: 'existing' });
 
     expect(res.statusCode).toBe(400);
-    expect(res.body.error).toMatch(/existe/i);
+    expect(res.body.error).toMatch(/already exists/i);
   });
 
   test('requires authentication', async () => {

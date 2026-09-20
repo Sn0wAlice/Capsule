@@ -17,10 +17,10 @@ router.get('/', async (req, res) => {
        ORDER BY t.name`,
       [req.session.user.id]
     );
-    res.render('tags', { pageTitle: 'Mes tags', tags });
+    res.render('tags', { pageTitle: 'My tags', tags });
   } catch (err) {
     console.error('Tags list error:', err);
-    res.render('tags', { pageTitle: 'Mes tags', tags: [] });
+    res.render('tags', { pageTitle: 'My tags', tags: [] });
   }
 });
 
@@ -34,7 +34,7 @@ router.post('/:id/rename', async (req, res) => {
       [name, req.session.user.id, req.params.id]
     );
     if (existing.length > 0) {
-      return res.status(400).json({ error: 'Un tag avec ce nom existe déjà' });
+      return res.status(400).json({ error: 'A tag with that name already exists' });
     }
     await pool.execute(
       'UPDATE tags SET name = ? WHERE id = ? AND user_id = ?',

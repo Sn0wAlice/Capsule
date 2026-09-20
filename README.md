@@ -1,63 +1,64 @@
 # Capsule
 
-Application web self-hosted de gestion et lecture de vidéos. Organisez vos bibliothèques, partagez-les entre utilisateurs et streamez depuis n'importe quel navigateur.
+Self-hosted web app for managing and watching your video library. Organise your
+libraries, share them with other users, and stream from any browser.
 
-## Fonctionnalités
+## Features
 
-### Bibliothèques
-- Ajoutez des dossiers locaux, scan automatique des fichiers vidéo
-- **Couvertures** — Thumbnail de couverture affichée sur le dashboard
-- **Navigation dossier** avec compteur de vidéos par dossier
-- **Vue liste/grille** avec tri par nom, date, taille ou nombre de vues
-- **Filtre "non vues"** — Affiche uniquement les vidéos jamais regardées
-- **File watcher** — Détection automatique des nouveaux fichiers
-- **Détection de doublons** à travers les bibliothèques
+### Libraries
+- Add local folders, videos are indexed automatically
+- **Covers** — Cover thumbnail shown on the dashboard
+- **Folder browsing** with a video count per folder
+- **Grid and list views** with sorting by name, date, size or view count
+- **"Unwatched" filter** — Show only videos you have never played
+- **File watcher** — New files are picked up automatically
+- **Duplicate detection** across libraries
 
-### Lecteur vidéo
-- Lecteur intégré (ArtPlayer) avec reprise de lecture automatique
-- **Auto-play** — Enchaînement aléatoire ou alphabétique
-- **Vitesse de lecture persistante** — Sauvegardée entre les sessions
-- **Pistes audio multiples** — Affichage des pistes disponibles (langue, codec)
-- Raccourcis clavier complets
+### Video player
+- Built-in player (ArtPlayer) that resumes where you left off
+- **Autoplay** — Play through a library randomly or alphabetically
+- **Persistent playback speed** — Kept between sessions
+- **Multiple audio tracks** — Available tracks listed with language and codec
+- Full keyboard shortcuts
 
 ### Organisation
-- **Tags colorés** — 9 couleurs, gestion centralisée, recherche par tag
-- **Playlists** — Création, réordonnancement drag & drop
-- **Smart playlists** — Playlists auto-générées par critères (tag, durée, résolution, bibliothèque)
-- **Lecture en continu** — Bouton "Lire tout" sur les playlists
-- **Favoris, watchlist & historique** — Suivi de progression avec section "Continuer à regarder"
+- **Coloured tags** — 9 colours, central management, search by tag
+- **Playlists** — Create and reorder with drag & drop
+- **Smart playlists** — Generated from criteria (tag, duration, resolution, library)
+- **Continuous playback** — "Play all" on any playlist
+- **Favourites, watchlist and history** — Progress tracking with a "Continue watching" row
 
 ### Dashboard
-- **Statistiques** — Total vidéos, espace disque, durée totale
-- **Continuer à regarder** — Vidéos en cours avec barre de progression
-- Sections favoris, watchlist, historique récent
+- **Statistics** — Total videos, disk usage, total runtime
+- **Continue watching** — In-progress videos with a progress bar
+- Favourites, watchlist and recent history sections
 
-### Multi-utilisateur
-- Rôles admin/user, partage de bibliothèques (lecture / lecture+écriture)
-- **Création de comptes** par l'admin
-- **Désactivation de comptes** sans suppression
-- **Dernière connexion** visible dans l'admin
-- **Déconnexion forcée** d'un utilisateur
-- **Espace disque par bibliothèque** dans le panel admin
-- Journal d'audit des actions admin
+### Multi-user
+- Admin and user roles, library sharing (read / read+write)
+- **Account creation** by an admin
+- **Disable accounts** without deleting them
+- **Last sign-in** visible in the admin panel
+- **Force sign-out** for any user
+- **Disk usage per library** in the admin panel
+- Audit log of admin actions
 
-### Technique
-- **Thumbnails** — Génération automatique via ffmpeg
-- **Worker séparé** — Traitement ffmpeg dans un processus dédié
-- **Thèmes** — Mode sombre et clair
-- **Docker ready** — Image multi-arch (amd64/arm64), CI/CD GitHub Actions
-- Sécurité : CSRF, rate limiting, protection path traversal
+### Under the hood
+- **Thumbnails** — Generated automatically with ffmpeg
+- **Separate worker** — ffmpeg runs in its own process
+- **Dark interface** — Monochrome design system inspired by shadcn/ui
+- **Docker ready** — Multi-arch image (amd64/arm64), GitHub Actions CI/CD
+- Security: CSRF, rate limiting, path traversal protection
 
 ## Stack
 
 - **Backend** — Node.js >= 20.19, Express 5, EJS 6
-- **Base de données** — MySQL 8.4 (LTS)
-- **Frontend** — Vanilla JS/CSS, ArtPlayer 5
-- **Infra** — Docker (image `node:24-alpine`), GitHub Actions, GHCR
+- **Database** — MySQL 8.4 (LTS)
+- **Frontend** — Vanilla JS/CSS (in-house shadcn/ui-style design system, dark theme only), ArtPlayer 5
+- **Infrastructure** — Docker (`node:24-alpine`), GitHub Actions, GHCR
 
-## Déploiement rapide
+## Quick start
 
-### 1. Cloner et configurer
+### 1. Clone and configure
 
 ```bash
 git clone https://github.com/sn0walice/capsule.git
@@ -65,150 +66,153 @@ cd capsule
 cp .env.example .env
 ```
 
-Editez `.env` avec vos valeurs :
+Edit `.env` with your own values:
 
 ```env
 PORT=3000
 DB_HOST=mysql
 DB_PORT=3306
 DB_USER=capsule
-DB_PASSWORD=un_mot_de_passe_fort
+DB_PASSWORD=a_strong_password
 DB_NAME=capsule
-SESSION_SECRET=une_chaine_aleatoire_longue
+SESSION_SECRET=a_long_random_string
 DISABLE_REGISTER=false
 ```
 
-### 2. Lancer avec Docker Compose
+### 2. Start with Docker Compose
 
-**Développement (build local) :**
+**Development (local build):**
 
 ```bash
 docker compose up -d
 ```
 
-**Production (image pré-construite depuis GHCR) :**
+**Production (pre-built image from GHCR):**
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-L'application est accessible sur `http://localhost:3000`.
+The app is then available at `http://localhost:3000`.
 
-### 3. Premier lancement
+### 3. First run
 
-1. Ouvrez l'application dans votre navigateur
-2. Créez un compte — le **premier utilisateur inscrit devient automatiquement admin**
-3. Ajoutez une bibliothèque en indiquant le chemin du dossier monté (ex: `/media/films`)
-4. Lancez un scan pour indexer les vidéos
+1. Open the app in your browser
+2. Create an account — the **first user to register automatically becomes an admin**
+3. Add a library, pointing it at a mounted folder (e.g. `/media/movies`)
+4. Run a scan to index the videos
 
-## Mise à jour depuis une version < 1.1.0
+## Upgrading from a version older than 1.1.0
 
-La version 1.1.0 fait passer l'image MySQL de `8.0` (fin de support) à `8.4` (LTS).
-MySQL migre le volume de données automatiquement au premier démarrage, mais **ce
-changement n'est pas réversible** : un retour à `mysql:8.0` sur le même volume
-échouera.
+Version 1.1.0 moves the MySQL image from `8.0` (end of life) to `8.4` (LTS).
+MySQL migrates the data volume automatically on first start, but **this change is
+not reversible**: going back to `mysql:8.0` on the same volume will fail.
 
-Avant `docker compose pull && docker compose up -d`, sauvegardez la base :
+Back the database up before `docker compose pull && docker compose up -d`:
 
 ```bash
 docker compose exec mysql mysqldump -u root -p"$DB_PASSWORD" --all-databases > capsule-backup.sql
 ```
 
-Pour rester sur MySQL 8.0, remplacez `image: mysql:8.4` par `image: mysql:8.0`
-dans votre `docker-compose.yml` — l'application reste compatible.
+To stay on MySQL 8.0, replace `image: mysql:8.4` with `image: mysql:8.0` in your
+`docker-compose.yml` — the app still works with it.
 
 ## Volumes
 
-| Chemin conteneur | Description |
+| Container path | Description |
 |---|---|
-| `/media` | Point de montage pour vos fichiers vidéo |
-| `/var/lib/mysql` | Données MySQL (volume Docker) |
+| `/media` | Mount point for your video files |
+| `/var/lib/mysql` | MySQL data (Docker volume) |
 
-Montez les **mêmes volumes** sur les conteneurs `app` et `worker`. Le worker a besoin d'accéder aux fichiers pour générer les thumbnails.
+Mount the **same volumes** on the `app` and `worker` containers. The worker needs
+access to the files to generate thumbnails.
 
-Montez autant de dossiers que nécessaire, puis ajoutez-les comme bibliothèques dans l'interface :
+Mount as many folders as you need, then add them as libraries in the UI:
 
 ```yaml
 volumes:
-  - /chemin/local/films:/media/films
-  - /chemin/local/series:/media/series
+  - /local/path/movies:/media/movies
+  - /local/path/shows:/media/shows
 ```
 
-## Variables d'environnement
+## Environment variables
 
-| Variable | Description | Défaut |
+| Variable | Description | Default |
 |---|---|---|
-| `PORT` | Port de l'application | `3000` |
-| `DB_HOST` | Hôte MySQL | `mysql` |
-| `DB_PORT` | Port MySQL | `3306` |
-| `DB_USER` | Utilisateur MySQL | `capsule` |
-| `DB_PASSWORD` | Mot de passe MySQL | — |
-| `DB_NAME` | Nom de la base | `capsule` |
-| `SESSION_SECRET` | Secret pour les sessions | — |
-| `DISABLE_REGISTER` | Désactiver les inscriptions | `false` |
-| `MEDIA_PATH` | Chemin local des médias (compose) | `./media` |
-| `WORKER_CONCURRENCY` | Jobs ffmpeg en parallèle (worker) | `2` |
-| `WORKER_POLL_INTERVAL` | Intervalle de polling du worker (ms) | `3000` |
-| `DB_POOL_SIZE` | Taille du pool de connexions MySQL | `30` |
-| `NODE_ENV` | `production` force le cookie de session en `Secure` (HTTPS requis) | — |
+| `PORT` | Application port | `3000` |
+| `DB_HOST` | MySQL host | `mysql` |
+| `DB_PORT` | MySQL port | `3306` |
+| `DB_USER` | MySQL user | `capsule` |
+| `DB_PASSWORD` | MySQL password | — |
+| `DB_NAME` | Database name | `capsule` |
+| `SESSION_SECRET` | Session signing secret | — |
+| `DISABLE_REGISTER` | Disable self-registration | `false` |
+| `MEDIA_PATH` | Local media path (compose) | `./media` |
+| `WORKER_CONCURRENCY` | Parallel ffmpeg jobs (worker) | `2` |
+| `WORKER_POLL_INTERVAL` | Worker poll interval (ms) | `3000` |
+| `DB_POOL_SIZE` | MySQL connection pool size | `30` |
+| `NODE_ENV` | `production` marks the session cookie `Secure` (requires HTTPS) | — |
 
 ## CI/CD
 
-Le workflow GitHub Actions (`.github/workflows/docker.yml`) exécute la suite de tests puis build et push l'image Docker sur GHCR. Le build est bloqué si les tests échouent :
+The GitHub Actions workflow (`.github/workflows/docker.yml`) runs the test suite,
+then builds and pushes the Docker image to GHCR. The build is blocked if the tests
+fail:
 
-- **Job `test`** — `npm ci` + `npm test` sur Node 24
-- **Push sur `main`** — build et push avec les tags `latest` + SHA du commit
-- **Tag `v*`** — build et push avec le tag de version (ex: `v1.0.0` → `1.0.0`, `1.0`)
-- **Pull request** — build uniquement (pas de push), vérifie que l'image compile
-- **Multi-arch** — `linux/amd64` et `linux/arm64`
+- **`test` job** — `npm ci` + `npm test` on Node 24
+- **Push to `main`** — build and push tagged `latest` + commit SHA
+- **Tag `v*`** — build and push with the version tag (e.g. `v1.0.0` → `1.0.0`, `1.0`)
+- **Pull request** — build only (no push), verifies the image still compiles
+- **Multi-arch** — `linux/amd64` and `linux/arm64`
 
-L'image est disponible sur `ghcr.io/sn0walice/capsule`.
+The image is published at `ghcr.io/sn0walice/capsule`.
 
 ## Architecture
 
 ```
 ┌─────────┐     ┌─────────┐     ┌─────────┐
 │   app   │────▶│  MySQL  │◀────│ worker  │
-│ (web)   │     │         │     │ (ffmpeg)│
+│  (web)  │     │         │     │ (ffmpeg)│
 └─────────┘     └─────────┘     └─────────┘
 ```
 
-- **app** — Serveur web Express (scan, streaming, API). Ne fait aucun appel ffmpeg.
-- **worker** — Processus séparé qui poll la table `jobs` et exécute les tâches ffmpeg (thumbnails, sprites, métadonnées). Si le worker crash, le serveur web continue de fonctionner.
-- **MySQL** — Base partagée. La table `jobs` sert de file d'attente entre app et worker.
+- **app** — Express web server (scanning, streaming, API). Never calls ffmpeg.
+- **worker** — Separate process that polls the `jobs` table and runs the ffmpeg
+  work (thumbnails, sprites, metadata). If the worker crashes, the web server
+  keeps serving.
+- **MySQL** — Shared database. The `jobs` table is the queue between app and worker.
 
 ## Administration
 
-Le panneau admin (`/admin`) permet de :
+The admin panel (`/admin`) lets you:
 
-- Créer des comptes utilisateur
-- Voir la liste des utilisateurs avec dernière connexion
-- Changer les rôles (admin/user)
-- Activer/désactiver des comptes
-- Réinitialiser les mots de passe
-- Forcer la déconnexion d'un utilisateur
-- Supprimer des comptes
-- Voir l'espace disque par bibliothèque
-- Surveiller la file d'attente des jobs ffmpeg
-- Consulter le journal d'audit
+- Create user accounts
+- List users with their last sign-in
+- Change roles (admin/user)
+- Enable and disable accounts
+- Reset passwords
+- Force a user to sign out
+- See disk usage per library
+- Monitor the ffmpeg job queue
+- Read the audit log
 
-## Partage de bibliothèques
+## Library sharing
 
-Chaque utilisateur peut partager ses bibliothèques avec d'autres :
+Each user can share their libraries with others:
 
-- **Lecture** — Parcourir et streamer les vidéos
-- **Lecture/Écriture** — Parcourir, streamer, renommer, tagger et scanner
+- **Read** — Browse and stream videos
+- **Read/Write** — Browse, stream, rename, tag and scan
 
-## Raccourcis clavier (lecteur)
+## Keyboard shortcuts (player)
 
-| Touche | Action |
+| Key | Action |
 |---|---|
-| `F` | Ajouter/retirer des favoris |
-| `W` | Ajouter/retirer de la watchlist |
-| `N` | Vidéo suivante |
-| `L` | Plein écran |
-| `M` | Changer le mode auto-play |
-| `T` | Ajouter un tag |
+| `F` | Toggle favourite |
+| `W` | Toggle watchlist |
+| `N` | Next video |
+| `L` | Fullscreen |
+| `M` | Cycle autoplay mode |
+| `T` | Add a tag |
 
 ## Licence
 

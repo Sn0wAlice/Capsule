@@ -16,8 +16,8 @@ function csrfToken(req, res, next) {
   next();
 }
 
-// Routes exemptées de CSRF (faible risque, appelées par des mécanismes qui ne peuvent pas
-// facilement transporter le token, ex: sendBeacon / keepalive depuis le player)
+// CSRF-exempt routes (low risk, called by mechanisms that cannot easily carry the
+// token, e.g. sendBeacon / keepalive from the player)
 const CSRF_EXEMPT = [
   /^\/videos\/\d+\/progress$/,
 ];
@@ -33,7 +33,7 @@ function csrfProtection(req, res, next) {
     return next();
   }
 
-  // Routes explicitement exemptées
+  // Explicitly exempt routes
   if (CSRF_EXEMPT.some(pattern => pattern.test(req.path))) {
     return next();
   }

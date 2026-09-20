@@ -2,8 +2,9 @@
 
 <%
 function formatSize(bytes) {
-  if (!bytes) return '—';
-  const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
+  bytes = Number(bytes);
+  if (!bytes || Number.isNaN(bytes)) return '—';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let i = 0;
   let size = bytes;
   while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
@@ -27,7 +28,7 @@ function formatBitrate(bps) {
 <div class="player-page">
   <!-- Breadcrumb -->
   <div class="player-breadcrumb">
-    <a href="/dashboard">Bibliothèques</a>
+    <a href="/dashboard">Libraries</a>
     <span class="separator">/</span>
     <a href="/libraries/<%= video.library_id %>"><%= video.library_name %></a>
     <% for (const crumb of breadcrumb) { %>
@@ -45,21 +46,21 @@ function formatBitrate(bps) {
         <div id="artplayer-app"></div>
       </div>
       <div class="player-title-bar">
-        <h1 class="player-title" id="video-title"<% if (['owner','admin','write'].includes(permission)) { %> title="Double-cliquer pour renommer"<% } %>><%= video.title || video.filename %></h1>
+        <h1 class="player-title" id="video-title"<% if (['owner','admin','write'].includes(permission)) { %> title="Double-click to rename"<% } %>><%= video.title || video.filename %></h1>
         <div class="player-actions">
-          <button class="btn btn-sm btn-fav<%= isFavorite ? ' active' : '' %>" id="btn-fav" title="Favoris (F)">
+          <button class="btn btn-sm btn-fav<%= isFavorite ? ' active' : '' %>" id="btn-fav" title="Favourite (F)">
             <span id="fav-icon"><%- isFavorite ? '&#9733;' : '&#9734;' %></span>
           </button>
-          <button class="btn btn-sm btn-wl<%= isWatchlisted ? ' active' : '' %>" id="btn-wl" title="A regarder (W)">
+          <button class="btn btn-sm btn-wl<%= isWatchlisted ? ' active' : '' %>" id="btn-wl" title="Watchlist (W)">
             <span id="wl-icon"><%- isWatchlisted ? '&#10003;' : '&#9201;' %></span>
           </button>
-          <a href="/videos/<%= video.id %>/download" class="btn btn-sm" title="Télécharger" download>&#8595; DL</a>
+          <a href="/videos/<%= video.id %>/download" class="btn btn-sm" title="Download" download>&#8595; Download</a>
           <% if (['owner','admin','write'].includes(permission)) { %>
-          <button class="btn btn-sm" id="btn-reprocess" title="Regénérer thumbnail et métadonnées">&#8635; Retraiter</button>
-          <button class="btn btn-sm btn-danger" id="btn-delete" title="Supprimer de la bibliothèque">&#128465; Supprimer</button>
+          <button class="btn btn-sm" id="btn-reprocess" title="Rebuild thumbnail and metadata">&#8635; Reprocess</button>
+          <button class="btn btn-sm btn-danger" id="btn-delete" title="Remove from library">&#128465; Delete</button>
           <% } %>
           <% if (playlists.length > 0) { %>
-          <select id="add-to-playlist" class="autoplay-select" title="Ajouter à une playlist">
+          <select id="add-to-playlist" class="autoplay-select" title="Add to a playlist">
             <option value="">+ Playlist</option>
             <% for (const pl of playlists) { %>
               <option value="<%= pl.id %>"><%= pl.name %></option>
@@ -101,38 +102,38 @@ function formatBitrate(bps) {
       <% if (canWrite || video.description) { %>
       <div class="video-description-block" id="desc-block">
         <% if (video.description) { %>
-          <!-- Description existante affichée -->
+          <!-- Existing description -->
           <div class="desc-display" id="desc-display">
             <p class="desc-text" id="desc-text"><%= video.description %></p>
             <% if (canWrite) { %>
-            <button class="desc-edit-btn" id="desc-edit-btn" title="Modifier la description">
+            <button class="desc-edit-btn" id="desc-edit-btn" title="Edit description">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              Modifier
+              Edit
             </button>
             <% } %>
           </div>
         <% } %>
 
         <% if (canWrite) { %>
-        <!-- Zone d'édition (masquée si description déjà présente) -->
+        <!-- Editor (hidden when a description already exists) -->
         <div class="desc-editor" id="desc-editor" style="<%= video.description ? 'display:none' : '' %>">
           <textarea
             id="video-description"
             class="desc-textarea"
-            placeholder="Ajouter une description…"
+            placeholder="Add a description…"
             rows="3"
           ><%= video.description || '' %></textarea>
           <div class="desc-editor-actions">
-            <button class="btn btn-sm btn-primary" id="btn-save-desc">Enregistrer</button>
+            <button class="btn btn-sm btn-primary" id="btn-save-desc">Save</button>
             <% if (video.description) { %>
-            <button class="btn btn-sm" id="desc-cancel-btn">Annuler</button>
+            <button class="btn btn-sm" id="desc-cancel-btn">Cancel</button>
             <% } %>
           </div>
         </div>
         <% } %>
 
         <% if (!video.description && !canWrite) { %>
-          <!-- Rien à afficher pour les lecteurs sans description -->
+          <!-- Nothing to show for read-only viewers when there is no description -->
         <% } %>
       </div>
       <% } %>
@@ -141,46 +142,46 @@ function formatBitrate(bps) {
     <!-- Right: Info Panel -->
     <div class="player-sidebar">
       <div class="sidebar-section">
-        <h3>Informations</h3>
+        <h3>Information</h3>
         <div class="info-row">
-          <span class="info-label">Fichier</span>
+          <span class="info-label">File</span>
           <span class="info-value"><%= video.filename %></span>
         </div>
         <div class="info-row">
-          <span class="info-label">Chemin</span>
+          <span class="info-label">Path</span>
           <span class="info-value mono"><%= video.filepath %></span>
         </div>
         <div class="info-row">
-          <span class="info-label">Bibliothèque</span>
+          <span class="info-label">Library</span>
           <span class="info-value"><%= video.library_name %></span>
         </div>
         <% if (video.duration) { %>
         <div class="info-row">
-          <span class="info-label">Durée</span>
+          <span class="info-label">Duration</span>
           <span class="info-value"><%= formatDuration(video.duration) %></span>
         </div>
         <% } %>
         <% if (video.size) { %>
         <div class="info-row">
-          <span class="info-label">Taille</span>
+          <span class="info-label">Size</span>
           <span class="info-value"><%= formatSize(video.size) %></span>
         </div>
         <% } %>
         <% if (video.width && video.height) { %>
         <div class="info-row">
-          <span class="info-label">Résolution</span>
+          <span class="info-label">Resolution</span>
           <span class="info-value"><%= video.width %>×<%= video.height %></span>
         </div>
         <% } %>
         <% if (video.codec) { %>
         <div class="info-row">
-          <span class="info-label">Codec vidéo</span>
+          <span class="info-label">Video codec</span>
           <span class="info-value mono"><%= video.codec %></span>
         </div>
         <% } %>
         <% if (video.audio_codec) { %>
         <div class="info-row">
-          <span class="info-label">Codec audio</span>
+          <span class="info-label">Audio codec</span>
           <span class="info-value mono"><%= video.audio_codec %></span>
         </div>
         <% } %>
@@ -192,11 +193,11 @@ function formatBitrate(bps) {
         %>
         <% if (audioTracks && audioTracks.length > 1) { %>
         <div class="info-row">
-          <span class="info-label">Pistes audio</span>
+          <span class="info-label">Audio tracks</span>
           <span class="info-value">
             <% for (const track of audioTracks) { %>
               <span class="badge badge-info" style="margin: 1px 2px; display: inline-block;">
-                <%= track.language || ('Piste ' + track.index) %><% if (track.title) { %> — <%= track.title %><% } %> (<%= track.codec %>)
+                <%= track.language || ('Track ' + track.index) %><% if (track.title) { %> — <%= track.title %><% } %> (<%= track.codec %>)
               </span>
             <% } %>
           </span>
@@ -204,7 +205,7 @@ function formatBitrate(bps) {
         <% } %>
         <% if (video.bitrate) { %>
         <div class="info-row">
-          <span class="info-label">Débit</span>
+          <span class="info-label">Bitrate</span>
           <span class="info-value"><%= formatBitrate(video.bitrate) %></span>
         </div>
         <% } %>
@@ -215,21 +216,21 @@ function formatBitrate(bps) {
         </div>
         <% } %>
         <div class="info-row">
-          <span class="info-label">Ajouté le</span>
-          <span class="info-value"><%= new Date(video.created_at).toLocaleDateString('fr-FR') %></span>
+          <span class="info-label">Added</span>
+          <span class="info-value"><%= new Date(video.created_at).toLocaleDateString('en-GB') %></span>
         </div>
       </div>
 
 
       <div class="sidebar-section sidebar-shortcuts">
-        <h3>Raccourcis</h3>
-        <div class="shortcut-row"><kbd>F</kbd> <span>Favoris</span></div>
-        <div class="shortcut-row"><kbd>W</kbd> <span>A regarder</span></div>
-        <div class="shortcut-row"><kbd>N</kbd> <span>Vidéo suivante</span></div>
-        <div class="shortcut-row"><kbd>L</kbd> <span>Plein écran</span></div>
-        <div class="shortcut-row"><kbd>M</kbd> <span>Mode auto-play</span></div>
+        <h3>Shortcuts</h3>
+        <div class="shortcut-row"><kbd>F</kbd> <span>Favourite</span></div>
+        <div class="shortcut-row"><kbd>W</kbd> <span>Watchlist</span></div>
+        <div class="shortcut-row"><kbd>N</kbd> <span>Next video</span></div>
+        <div class="shortcut-row"><kbd>L</kbd> <span>Fullscreen</span></div>
+        <div class="shortcut-row"><kbd>M</kbd> <span>Autoplay mode</span></div>
         <% if (['owner','admin','write'].includes(permission)) { %>
-        <div class="shortcut-row"><kbd>T</kbd> <span>Ajouter un tag</span></div>
+        <div class="shortcut-row"><kbd>T</kbd> <span>Add a tag</span></div>
         <% } %>
       </div>
     </div>
@@ -238,7 +239,7 @@ function formatBitrate(bps) {
   <!-- Similar Videos -->
   <% if (similar.length > 0) { %>
   <div class="similar-section">
-    <h2>Autres vidéos</h2>
+    <h2>More from this library</h2>
     <div class="video-grid">
       <% for (const v of similar) { %>
         <a href="/videos/<%= v.id %>" class="video-card">
@@ -280,10 +281,10 @@ function formatBitrate(bps) {
   });
 
   // Restore saved playback rate + volume
-  // Note : le muted state n'est JAMAIS persisté — chaque session démarre avec le son
+  // Note: muted state is NEVER persisted — every session starts with sound on
   const savedRate   = parseFloat(localStorage.getItem('capsule_playback_rate')) || 1;
   const savedVolume = parseFloat(localStorage.getItem('capsule_volume'))        || 0.7;
-  // Nettoyer toute valeur stale qui aurait pu être écrite par une version précédente
+  // Clear any stale value written by an earlier version
   localStorage.removeItem('capsule_muted');
 
   // Init ArtPlayer
@@ -306,15 +307,15 @@ function formatBitrate(bps) {
     fullscreenWeb: true,
     miniProgressBar: true,
     playsInline: true,
-    theme: '#8b5cf6',
-    // Désactiver le plugin auto-playback d'ArtPlayer qui restaure la position depuis localStorage
-    // → c'est lui qui causait le démarrage à 00:05, on gère la position nous-mêmes via SAVED_PROGRESS
+    theme: getComputedStyle(document.documentElement).getPropertyValue('--foreground').trim() || '#fafafa',
+    // Disable ArtPlayer's auto-playback plugin, which restores the position from
+    // localStorage — that was the 00:05 start. We drive the position via SAVED_PROGRESS.
     autoPlayback: false,
     controls: [
       {
         position: 'right',
         html: '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/><rect x="4" y="5" width="2" height="14" rx="1"/></svg>',
-        tooltip: 'Vidéo suivante (N)',
+        tooltip: 'Next video (N)',
         click: function () { goNext(); },
       },
     ],
@@ -361,7 +362,7 @@ function formatBitrate(bps) {
   art.on('ready', () => {
     if (savedRate !== 1) art.playbackRate = savedRate;
 
-    // Reprendre là où on en était (SAVED_PROGRESS = 0 si autoplay, cf. route serveur)
+    // Resume where we left off (SAVED_PROGRESS is 0 on autoplay, see the server route)
     if (SAVED_PROGRESS > 2) {
       art.currentTime = SAVED_PROGRESS;
     }
@@ -370,7 +371,7 @@ function formatBitrate(bps) {
       const p = art.play();
       if (p && typeof p.catch === 'function') {
         p.catch(() => {
-          // Browser a bloqué l'autoplay avec son → muted + overlay
+          // The browser blocked autoplay with sound → mute and show the overlay
           art.muted = true;
           art.play().catch(() => {});
           showUnmuteOverlay();
@@ -396,8 +397,8 @@ function formatBitrate(bps) {
   // Save on pause/close
   function saveProgress() {
     if (art.currentTime > 0) {
-      // keepalive: true = survit à la fermeture de page, comme sendBeacon
-      // mais passe par l'intercepteur fetch → CSRF token auto-injecté
+      // keepalive: true survives page unload like sendBeacon, but still goes through
+      // the fetch interceptor so the CSRF token is injected
       fetch('/videos/' + VIDEO_ID + '/progress', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -409,7 +410,7 @@ function formatBitrate(bps) {
   art.on('video:pause', saveProgress);
   window.addEventListener('beforeunload', saveProgress);
 
-  // Overlay "cliquer pour activer le son" quand le browser bloque l'autoplay
+  // "Click to unmute" overlay, shown when the browser blocks autoplay with sound
   function showUnmuteOverlay() {
     const container = document.getElementById('artplayer-app');
     if (!container || document.getElementById('unmute-overlay')) return;
@@ -421,7 +422,7 @@ function formatBitrate(bps) {
         '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">' +
           '<path d="M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.796 8.796 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06A8.99 8.99 0 0 0 17.73 18L19 19.27 20.27 18 5.27 3 4.27 3zM12 4 9.91 6.09 12 8.18V4z"/>' +
         '</svg>' +
-        '<span>Cliquer pour activer le son</span>' +
+        '<span>Click to unmute</span>' +
       '</div>';
 
     overlay.addEventListener('click', () => {
@@ -434,13 +435,13 @@ function formatBitrate(bps) {
     container.appendChild(overlay);
   }
 
-  // Persist playback rate + volume (jamais le muted — voir commentaire ci-dessus)
+  // Persist playback rate + volume (never the muted flag — see the note above)
   art.on('video:ratechange', () => {
     localStorage.setItem('capsule_playback_rate', art.playbackRate);
   });
   art.on('video:volumechange', () => {
-    // On ne sauvegarde que le niveau de volume, pas l'état muted
-    // Ainsi un mute forcé par le browser ne pollue pas les préférences
+    // Persist the volume level only, never the muted flag, so a browser-forced mute
+    // does not leak into the user's preferences
     if (art.volume > 0) {
       localStorage.setItem('capsule_volume', art.volume);
     }
@@ -600,14 +601,14 @@ function formatBitrate(bps) {
   const btnDelete = document.getElementById('btn-delete');
   if (btnDelete) {
     btnDelete.addEventListener('click', () => {
-      if (!confirm('Supprimer cette vidéo de la bibliothèque ? (le fichier reste sur le disque)')) return;
+      if (!confirm('Remove this video from the library? (the file stays on disk)')) return;
       fetch('/videos/' + VIDEO_ID + '/delete', { method: 'POST' })
         .then(r => r.json())
         .then(data => {
           if (data.ok) window.location.href = '/libraries/' + LIBRARY_ID;
-          else alert('Erreur: ' + (data.error || 'inconnue'));
+          else alert('Error: ' + (data.error || 'unknown'));
         })
-        .catch(() => alert('Erreur réseau'));
+        .catch(() => alert('Network error'));
     });
   }
 
@@ -615,19 +616,19 @@ function formatBitrate(bps) {
   const btnReprocess = document.getElementById('btn-reprocess');
   if (btnReprocess) {
     btnReprocess.addEventListener('click', () => {
-      if (!confirm('Relancer le traitement (thumbnail + métadonnées) pour cette vidéo ?')) return;
+      if (!confirm('Reprocess this video (thumbnail and metadata)?')) return;
       btnReprocess.disabled = true;
       btnReprocess.textContent = '⏳ En cours...';
       fetch('/videos/' + VIDEO_ID + '/reprocess', { method: 'POST' })
         .then(r => r.json())
         .then(data => {
           if (data.ok) {
-            btnReprocess.textContent = '✓ Relancé';
+            btnReprocess.textContent = '✓ Queued';
             setTimeout(() => { btnReprocess.disabled = false; btnReprocess.innerHTML = '&#8635; Retraiter'; }, 3000);
           } else {
             btnReprocess.disabled = false;
             btnReprocess.innerHTML = '&#8635; Retraiter';
-            alert('Erreur: ' + (data.error || 'inconnue'));
+            alert('Error: ' + (data.error || 'unknown'));
           }
         })
         .catch(() => { btnReprocess.disabled = false; btnReprocess.innerHTML = '&#8635; Retraiter'; });
@@ -670,16 +671,16 @@ function formatBitrate(bps) {
         body: JSON.stringify({ description: val }),
       }).then(r => r.json()).then(data => {
         if (data.ok) {
-          // Affiche la description sauvegardée
+          // Show the saved description
           if (val) {
-            // S'il n'y avait pas de display, en crée un dynamiquement
+            // Create the display block if it was not rendered
             if (!descDisplay) {
               const block = document.getElementById('desc-block');
               const div = document.createElement('div');
               div.className = 'desc-display';
               div.id = 'desc-display';
               div.innerHTML = '<p class="desc-text" id="desc-text"></p>' +
-                '<button class="desc-edit-btn" id="desc-edit-btn" title="Modifier"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Modifier</button>';
+                '<button class="desc-edit-btn" id="desc-edit-btn" title="Edit"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit</button>';
               if (descEditor) block.insertBefore(div, descEditor);
               div.querySelector('.desc-edit-btn').addEventListener('click', showEditor);
               div.querySelector('.desc-text').textContent = val;
@@ -689,7 +690,7 @@ function formatBitrate(bps) {
                 const cancelBtn = document.createElement('button');
                 cancelBtn.className = 'btn btn-sm';
                 cancelBtn.id = 'desc-cancel-btn';
-                cancelBtn.textContent = 'Annuler';
+                cancelBtn.textContent = 'Cancel';
                 cancelBtn.addEventListener('click', () => {
                   descEditor.style.display = 'none';
                   div.style.display = '';
@@ -700,11 +701,11 @@ function formatBitrate(bps) {
               showDisplay(val);
             }
           } else {
-            // Description vidée — reste en mode éditeur
+            // Description cleared — stay in editor mode
             if (descDisplay) descDisplay.style.display = 'none';
           }
-          btnSaveDesc.textContent = '✓ Enregistré';
-          setTimeout(() => { btnSaveDesc.disabled = false; btnSaveDesc.textContent = 'Enregistrer'; }, 2000);
+          btnSaveDesc.textContent = '✓ Saved';
+          setTimeout(() => { btnSaveDesc.disabled = false; btnSaveDesc.textContent = 'Save'; }, 2000);
         }
       }).catch(() => { btnSaveDesc.disabled = false; });
     });

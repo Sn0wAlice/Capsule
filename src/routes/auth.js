@@ -14,22 +14,22 @@ router.post('/login', async (req, res) => {
   try {
     const [rows] = await pool.execute('SELECT * FROM users WHERE username = ?', [username]);
     if (rows.length === 0) {
-      return res.render('login', { error: 'Identifiants invalides', registerEnabled: !isRegisterDisabled() });
+      return res.render('login', { error: 'Invalid credentials', registerEnabled: !isRegisterDisabled() });
     }
     const user = rows[0];
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) {
-      return res.render('login', { error: 'Identifiants invalides', registerEnabled: !isRegisterDisabled() });
+      return res.render('login', { error: 'Invalid credentials', registerEnabled: !isRegisterDisabled() });
     }
     if (user.is_active === 0) {
-      return res.render('login', { error: 'Ce compte est désactivé. Contactez un administrateur.', registerEnabled: !isRegisterDisabled() });
+      return res.render('login', { error: 'This account is disabled. Contact an administrator.', registerEnabled: !isRegisterDisabled() });
     }
     await pool.execute('UPDATE users SET last_login_at = NOW() WHERE id = ?', [user.id]);
-    req.session.user = { id: user.id, username: user.username, role: user.role || 'user', theme: user.theme || 'dark', default_view: user.default_view || 'grid' };
+    req.session.user = { id: user.id, username: user.username, role: user.role || 'user', default_view: user.default_view || 'grid' };
     res.redirect('/dashboard');
   } catch (err) {
     console.error('Login error:', err);
-    res.render('login', { error: 'Erreur serveur', registerEnabled: !isRegisterDisabled() });
+    res.render('login', { error: 'Server error', registerEnabled: !isRegisterDisabled() });
   }
 });
 
@@ -47,13 +47,13 @@ router.post('/register', async (req, res) => {
   if (isRegisterDisabled()) return res.redirect('/login');
   const { username, password, confirm } = req.body;
   if (!username || !password) {
-    return res.render('register', { error: 'Tous les champs sont requis' });
+    return res.render('register', { error: 'All fields are required' });
   }
   if (password !== confirm) {
-    return res.render('register', { error: 'Les mots de passe ne correspondent pas' });
+    return res.render('register', { error: 'The passwords do not match' });
   }
   if (password.length < 4) {
-    return res.render('register', { error: 'Mot de passe trop court (min 4 caractères)' });
+    return res.render('register', { error: 'Password too short (4 characters minimum)' });
   }
   try {
     const hash = await bcrypt.hash(password, 10);
@@ -61,15 +61,15 @@ router.post('/register', async (req, res) => {
     const [countRows] = await pool.execute('SELECT COUNT(*) as cnt FROM users');
     const role = countRows[0].cnt === 0 ? 'admin' : 'user';
     await pool.execute('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)', [username, hash, role]);
-    const [rows] = await pool.execute('SELECT id, username, role, theme, default_view FROM users WHERE username = ?', [username]);
-    req.session.user = { id: rows[0].id, username: rows[0].username, role: rows[0].role, theme: rows[0].theme || 'dark', default_view: rows[0].default_view || 'grid' };
+    const [rows] = await pool.execute('SELECT id, username, role, default_view FROM users WHERE username = ?', [username]);
+    req.session.user = { id: rows[0].id, username: rows[0].username, role: rows[0].role, default_view: rows[0].default_view || 'grid' };
     res.redirect('/dashboard');
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') {
-      return res.render('register', { error: 'Ce nom d\'utilisateur est déjà pris' });
+      return res.render('register', { error: 'That username is already taken' });
     }
     console.error('Register error:', err);
-    res.render('register', { error: 'Erreur serveur' });
+    res.render('register', { error: 'Server error' });
   }
 });
 

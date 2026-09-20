@@ -85,7 +85,7 @@ describe('POST /login', () => {
       .send('username=alice&password=wrong');
 
     expect(res.statusCode).toBe(200);
-    expect(res.text).toContain('Identifiants invalides');
+    expect(res.text).toContain('Invalid credentials');
   });
 
   test('re-renders login when user not found', async () => {
@@ -96,7 +96,7 @@ describe('POST /login', () => {
       .send('username=nobody&password=pass');
 
     expect(res.statusCode).toBe(200);
-    expect(res.text).toContain('Identifiants invalides');
+    expect(res.text).toContain('Invalid credentials');
   });
 
   test('re-renders login for inactive user', async () => {
@@ -111,7 +111,7 @@ describe('POST /login', () => {
       .send('username=alice&password=secret');
 
     expect(res.statusCode).toBe(200);
-    expect(res.text).toContain('désactivé');
+    expect(res.text).toContain('disabled');
   });
 
   test('requires username field', async () => {
@@ -200,7 +200,7 @@ describe('POST /register', () => {
       .send('username=newuser&password=abc&confirm=xyz');
 
     expect(res.statusCode).toBe(200);
-    expect(res.text).toContain('correspondent');
+    expect(res.text).toContain('do not match');
     expect(pool.execute).not.toHaveBeenCalled();
   });
 
@@ -210,7 +210,7 @@ describe('POST /register', () => {
       .send('username=newuser&password=ab&confirm=ab');
 
     expect(res.statusCode).toBe(200);
-    expect(res.text).toContain('court');
+    expect(res.text).toContain('too short');
     expect(pool.execute).not.toHaveBeenCalled();
   });
 
@@ -235,6 +235,6 @@ describe('POST /register', () => {
       .send('username=taken&password=pass123&confirm=pass123');
 
     expect(res.statusCode).toBe(200);
-    expect(res.text).toContain('pris');
+    expect(res.text).toContain('already taken');
   });
 });

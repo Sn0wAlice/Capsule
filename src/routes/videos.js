@@ -318,7 +318,7 @@ router.post('/bulk/tag', async (req, res) => {
     res.json({ ok: true, count: videoIds.length });
   } catch (err) {
     console.error('Bulk tag error:', err);
-    res.status(500).json({ error: 'Erreur' });
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
@@ -331,7 +331,7 @@ router.post('/bulk/playlist', async (req, res) => {
     const userId = req.session.user.id;
     // Verify playlist ownership
     const [pl] = await pool.execute('SELECT id FROM playlists WHERE id = ? AND user_id = ?', [playlistId, userId]);
-    if (pl.length === 0) return res.status(403).json({ error: 'Playlist non trouvée' });
+    if (pl.length === 0) return res.status(403).json({ error: 'Playlist not found' });
 
     // Get max position
     const [maxPos] = await pool.execute('SELECT MAX(position) as maxp FROM playlist_items WHERE playlist_id = ?', [playlistId]);
@@ -347,7 +347,7 @@ router.post('/bulk/playlist', async (req, res) => {
     res.json({ ok: true, count: videoIds.length });
   } catch (err) {
     console.error('Bulk playlist error:', err);
-    res.status(500).json({ error: 'Erreur' });
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
@@ -383,7 +383,7 @@ router.post('/bulk/delete', async (req, res) => {
     res.json({ ok: true, deleted: allowedIds.length });
   } catch (err) {
     console.error('Bulk delete error:', err);
-    res.status(500).json({ error: 'Erreur' });
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
@@ -530,7 +530,7 @@ router.get('/', async (req, res) => {
     );
 
     if (libIds.length === 0) return res.render('search', {
-      pageTitle: 'Recherche', query: q, videos: [], userTags,
+      pageTitle: 'Search', query: q, videos: [], userTags,
       tagFilter, durationFilter, resolutionFilter, codecFilter
     });
 
@@ -600,12 +600,12 @@ router.get('/', async (req, res) => {
 
     const [videos] = await pool.query(sql, params);
     res.render('search', {
-      pageTitle: 'Recherche', query: q, videos, userTags,
+      pageTitle: 'Search', query: q, videos, userTags,
       tagFilter, durationFilter, resolutionFilter, codecFilter
     });
   } catch (err) {
     console.error('Search error:', err);
-    res.render('search', { pageTitle: 'Recherche', query: q, videos: [], userTags: [],
+    res.render('search', { pageTitle: 'Search', query: q, videos: [], userTags: [],
       tagFilter: '', durationFilter: '', resolutionFilter: '', codecFilter: '' });
   }
 });
@@ -691,8 +691,8 @@ router.get('/:id', async (req, res) => {
     const isWatchlisted = wlRows.length > 0;
 
     // Record in watch history + increment view count
-    // En autoplay : on écrase le progress à 0 en DB pour que la prochaine lecture reprenne
-    // depuis le début (évite de repartir d'un timestamp stale si la vidéo est re-sélectionnée)
+    // Autoplay: reset progress to 0 in the DB so the next playback starts from the
+    // beginning instead of resuming from a stale timestamp if the video comes up again
     await pool.execute(
       `INSERT INTO watch_history (user_id, video_id, progress)
        VALUES (?, ?, ?)
@@ -767,3 +767,6 @@ router.get('/:id', async (req, res) => {
 });
 
 module.exports = router;
+// Exported for unit tests — the path-traversal guard must be tested directly,
+// not through a copy that can drift from this one.
+module.exports.safePath = safePath;

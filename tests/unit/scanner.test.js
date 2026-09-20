@@ -9,7 +9,8 @@ const path = require('path');
 // We test internals by requiring the module after mocking fs
 jest.mock('fs');
 
-const { VIDEO_EXTENSIONS, SUBTITLE_EXTENSIONS } = require('../../src/services/scanner');
+const { VIDEO_EXTENSIONS, SUBTITLE_EXTENSIONS, parseSubtitleMeta } = require('../../src/services/scanner');
+const { safePath } = require('../../src/routes/videos');
 
 // ── VIDEO_EXTENSIONS ──────────────────────────────────────────────────────────
 
@@ -41,113 +42,71 @@ describe('SUBTITLE_EXTENSIONS', () => {
   });
 });
 
-// ── parseSubtitleMeta (internal helper) ───────────────────────────────────────
+// ── parseSubtitleMeta ─────────────────────────────────────────────────────────
 
-// We can test parseSubtitleMeta indirectly via SUBTITLE_EXTENSIONS,
-// or we extract it for unit testing. Since it's not exported, test via integration.
-// Instead we test the language mapping logic manually:
-
-describe('subtitle language parsing logic', () => {
-  // Replicate the parseSubtitleMeta logic to unit-test it independently
-  function parseSubtitleMeta(subFilename, videoBasename) {
-    const noExt = path.basename(subFilename, path.extname(subFilename));
-    const suffix = noExt.slice(videoBasename.length).replace(/^[._-]/, '');
-    const lang = suffix || 'fr';
-    const labels = {
-      fr: 'Français', en: 'English', es: 'Español', de: 'Deutsch',
-      it: 'Italiano', pt: 'Português', ja: '日本語', zh: '中文', ar: 'العربية',
-    };
-    return { language: lang, label: labels[lang] || lang.toUpperCase() };
-  }
-
-  test('returns fr/Français for base subtitle (no suffix)', () => {
-    const result = parseSubtitleMeta('movie.srt', 'movie');
-    expect(result).toEqual({ language: 'fr', label: 'Français' });
+describe('subtitle language parsing', () => {
+  test('defaults to en/English for a base subtitle (no suffix)', () => {
+    expect(parseSubtitleMeta('movie.srt', 'movie')).toEqual({ language: 'en', label: 'English' });
   });
 
   test('extracts en from movie.en.srt', () => {
-    const result = parseSubtitleMeta('movie.en.srt', 'movie');
-    expect(result).toEqual({ language: 'en', label: 'English' });
+    expect(parseSubtitleMeta('movie.en.srt', 'movie')).toEqual({ language: 'en', label: 'English' });
   });
 
   test('extracts fr from movie.fr.vtt', () => {
-    const result = parseSubtitleMeta('movie.fr.vtt', 'movie');
-    expect(result).toEqual({ language: 'fr', label: 'Français' });
+    expect(parseSubtitleMeta('movie.fr.vtt', 'movie')).toEqual({ language: 'fr', label: 'French' });
   });
 
   test('extracts es from movie.es.srt', () => {
-    const result = parseSubtitleMeta('movie.es.srt', 'movie');
-    expect(result).toEqual({ language: 'es', label: 'Español' });
+    expect(parseSubtitleMeta('movie.es.srt', 'movie')).toEqual({ language: 'es', label: 'Spanish' });
   });
 
-  test('returns uppercased lang for unknown code', () => {
-    const result = parseSubtitleMeta('movie.zz.srt', 'movie');
-    expect(result).toEqual({ language: 'zz', label: 'ZZ' });
+  test('handles de/German', () => {
+    expect(parseSubtitleMeta('movie.de.srt', 'movie')).toEqual({ language: 'de', label: 'German' });
   });
 
-  test('handles underscore separator (movie_fr.srt)', () => {
-    const result = parseSubtitleMeta('movie_fr.srt', 'movie');
-    expect(result).toEqual({ language: 'fr', label: 'Français' });
+  test('handles ja/Japanese', () => {
+    expect(parseSubtitleMeta('movie.ja.srt', 'movie')).toEqual({ language: 'ja', label: 'Japanese' });
   });
 
-  test('handles dash separator (movie-en.srt)', () => {
-    const result = parseSubtitleMeta('movie-en.srt', 'movie');
-    expect(result).toEqual({ language: 'en', label: 'English' });
+  test('returns the uppercased code for an unknown language', () => {
+    expect(parseSubtitleMeta('movie.zz.srt', 'movie')).toEqual({ language: 'zz', label: 'ZZ' });
   });
 
-  test('handles de/Deutsch', () => {
-    const result = parseSubtitleMeta('film.de.vtt', 'film');
-    expect(result).toEqual({ language: 'de', label: 'Deutsch' });
+  test('handles an underscore separator (movie_fr.srt)', () => {
+    expect(parseSubtitleMeta('movie_fr.srt', 'movie')).toEqual({ language: 'fr', label: 'French' });
   });
 
-  test('handles ja/日本語', () => {
-    const result = parseSubtitleMeta('film.ja.srt', 'film');
-    expect(result).toEqual({ language: 'ja', label: '日本語' });
+  test('handles a hyphen separator (movie-en.srt)', () => {
+    expect(parseSubtitleMeta('movie-en.srt', 'movie')).toEqual({ language: 'en', label: 'English' });
   });
 });
 
-// ── canWrite helper ───────────────────────────────────────────────────────────
+// ── safePath (path traversal prevention) ──────────────────────────────────────
+// Exercises the real guard from src/routes/videos.js, not a copy of it.
 
-describe('safePath equivalent (path traversal prevention)', () => {
-  // Test the safePath logic that's inlined in routes
-  function safePath(basePath, relativePath) {
-    const resolved = path.resolve(basePath, relativePath);
-    if (
-      !resolved.startsWith(path.resolve(basePath) + path.sep) &&
-      resolved !== path.resolve(basePath)
-    ) {
-      return null;
-    }
-    return resolved;
-  }
-
-  test('allows valid relative path', () => {
-    const result = safePath('/media/films', 'action/movie.mp4');
-    expect(result).toBe('/media/films/action/movie.mp4');
+describe('safePath', () => {
+  test('allows a valid relative path', () => {
+    expect(safePath('/media/movies', 'action/movie.mp4')).toBe('/media/movies/action/movie.mp4');
   });
 
-  test('blocks path traversal with ../', () => {
-    const result = safePath('/media/films', '../../etc/passwd');
-    expect(result).toBeNull();
+  test('blocks traversal with ../', () => {
+    expect(safePath('/media/movies', '../../etc/passwd')).toBeNull();
   });
 
-  test('blocks absolute path outside base', () => {
-    const result = safePath('/media/films', '/etc/passwd');
-    expect(result).toBeNull();
+  test('blocks an absolute path outside the base', () => {
+    expect(safePath('/media/movies', '/etc/passwd')).toBeNull();
   });
 
-  test('allows file at root of basePath', () => {
-    const result = safePath('/media/films', 'movie.mp4');
-    expect(result).toBe('/media/films/movie.mp4');
+  test('allows a file at the root of basePath', () => {
+    expect(safePath('/media/movies', 'movie.mp4')).toBe('/media/movies/movie.mp4');
   });
 
-  test('allows nested path', () => {
-    const result = safePath('/media', 'films/action/movie.mkv');
-    expect(result).toBe('/media/films/action/movie.mkv');
+  test('allows a nested path', () => {
+    expect(safePath('/media', 'movies/action/movie.mkv')).toBe('/media/movies/action/movie.mkv');
   });
 
-  test('returns null for path exactly matching base (no sep)', () => {
-    const result = safePath('/media/films', '../other');
-    expect(result).toBeNull();
+  test('blocks a sibling directory that shares the base prefix', () => {
+    expect(safePath('/media/movies', '../other')).toBeNull();
   });
 });

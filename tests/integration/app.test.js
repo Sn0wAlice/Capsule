@@ -86,10 +86,10 @@ describe('GET /dashboard', () => {
     pool.execute.mockResolvedValueOnce([[]]); // libraries
 
     const agent = await loginAs(app);
-    const res = await agent.get('/dashboard?error=Erreur+test');
+    const res = await agent.get('/dashboard?error=Test+error');
 
     expect(res.statusCode).toBe(200);
-    expect(res.text).toContain('Erreur test');
+    expect(res.text).toContain('Test error');
   });
 });
 
