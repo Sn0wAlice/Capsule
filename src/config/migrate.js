@@ -40,14 +40,19 @@ async function migrate() {
       if (lockedSet.has(file)) continue;
 
       const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf-8');
+      // Strip `--` comments before splitting: a semicolon inside a comment would
+      // otherwise cut a statement in half and be sent to the server on its own.
       const statements = sql
+        .replace(/^\s*--.*$/gm, '')
         .split(';')
         .map(s => s.trim())
         .filter(s => s.length > 0);
 
       console.log(`[migrate] Applying ${file}...`);
       for (const stmt of statements) {
-        await pool.execute(stmt);
+        // DDL goes through query(), not execute(): several DDL forms are still
+        // rejected by the prepared-statement protocol.
+        await pool.query(stmt);
       }
 
       await pool.execute('INSERT INTO migrations (name) VALUES (?)', [file]);

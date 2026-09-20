@@ -6,6 +6,8 @@ const MySQLStore = require('express-mysql-session')(session);
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
 
 const pool = require('./config/database');
 const migrate = require('./config/migrate');
@@ -13,6 +15,9 @@ const { csrfToken, csrfProtection } = require('./middleware/csrf');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// The duplicates page renders every group it is given, so cap the query.
+const DUPLICATE_GROUP_LIMIT = 500;
 
 // Fail fast if session secret is not configured
 if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET === 'change_me') {
@@ -35,21 +40,50 @@ app.use(compression());
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
+// Express only enables the template cache when NODE_ENV is 'production', which
+// we deliberately leave unset so the session cookie is not forced to Secure.
+// Without this every render re-reads and recompiles the .ejs file from disk.
+// `npm run dev` opts out so template edits are picked up without a restart.
+app.set('view cache', process.env.VIEW_CACHE !== 'false');
+
 // Body parsing (with size limits)
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(express.json({ limit: '1mb' }));
 
-// Static files with cache
+// Fingerprint the assets whose URL never changes so they can be cached for a
+// year and still update the moment the file does. Without this the old 7-day
+// (and 30-day, for the player) max-age meant a deploy could take that long to
+// reach a browser that had already cached the previous build.
+function fileHash(filePath) {
+  try {
+    return crypto.createHash('sha1').update(fs.readFileSync(filePath)).digest('hex').slice(0, 8);
+  } catch {
+    return 'dev';
+  }
+}
+
+const ARTPLAYER_DIST = path.join(__dirname, '../node_modules/artplayer/dist');
+app.locals.assetVersion = fileHash(path.join(__dirname, 'public/css/style.css'));
+app.locals.vendorVersion = fileHash(path.join(ARTPLAYER_DIST, 'artplayer.js'));
+
+const IMMUTABLE = 'public, max-age=31536000, immutable';
+
+// Static files. Fingerprinted URLs are immutable, the rest revalidate daily.
 app.use(express.static(path.join(__dirname, 'public'), {
-  maxAge: '7d',
   etag: true,
+  setHeaders(res, filePath) {
+    res.setHeader(
+      'Cache-Control',
+      filePath.endsWith('style.css') ? IMMUTABLE : 'public, max-age=86400'
+    );
+  },
 }));
 
 // ArtPlayer served locally from node_modules (avoids a CDN dependency)
-app.use('/vendor/artplayer', express.static(
-  path.join(__dirname, '../node_modules/artplayer/dist'),
-  { maxAge: '30d', etag: true, immutable: true }
-));
+app.use('/vendor/artplayer', express.static(ARTPLAYER_DIST, {
+  etag: true,
+  setHeaders(res) { res.setHeader('Cache-Control', IMMUTABLE); },
+}));
 
 // Session store
 const sessionStore = new MySQLStore({
@@ -119,21 +153,24 @@ app.get('/duplicates', requireAuth, async (req, res) => {
     const libIds = await getAccessibleLibraryIds(req.session.user.id, req.session.user.role);
     if (libIds.length === 0) return res.render('duplicates', { pageTitle: 'Duplicates', groups: [] });
 
+    // Group the duplicate keys once, then join the matching rows back in.
+    // The previous correlated EXISTS re-probed the videos table for every row.
     const [dupes] = await pool.query(
       `SELECT v.id, v.filename, v.title, v.size, v.filepath, l.name as library_name,
               t.filename as thumb
-       FROM videos v
+       FROM (
+         SELECT filename, size
+         FROM videos
+         WHERE library_id IN (?)
+         GROUP BY filename, size
+         HAVING COUNT(*) > 1
+         LIMIT ?
+       ) d
+       JOIN videos v ON v.filename = d.filename AND v.size = d.size AND v.library_id IN (?)
        JOIN libraries l ON l.id = v.library_id
        LEFT JOIN thumbnails t ON t.video_id = v.id
-       WHERE l.id IN (?)
-       AND EXISTS (
-         SELECT 1 FROM videos v2
-         JOIN libraries l2 ON l2.id = v2.library_id
-         WHERE l2.id IN (?) AND v2.id != v.id
-         AND v2.filename = v.filename AND v2.size = v.size
-       )
        ORDER BY v.filename, v.size`,
-      [libIds, libIds]
+      [libIds, DUPLICATE_GROUP_LIMIT, libIds]
     );
 
     // Group by filename+size
@@ -161,117 +198,108 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     const userId = req.session.user.id;
     const userRole = req.session.user.role;
 
-    // Owned libraries (with cover thumbnail)
-    const [libraries] = await pool.execute(
-      `SELECT l.*, COUNT(v.id) as video_count,
-              COALESCE(l.cover_video_id,
-                (SELECT v2.id FROM videos v2 INNER JOIN thumbnails t2 ON t2.video_id = v2.id
-                 WHERE v2.library_id = l.id ORDER BY v2.id ASC LIMIT 1)
-              ) as cover_vid
-       FROM libraries l
-       LEFT JOIN videos v ON v.library_id = l.id
-       WHERE l.user_id = ?
-       GROUP BY l.id
-       ORDER BY l.name`,
-      [userId]
-    );
+    // The library lists and the set of accessible ids do not depend on each
+    // other, so they go out together rather than one round trip at a time.
+    const [[libraries], [sharedLibraries], libIds] = await Promise.all([
+      pool.execute(
+        `SELECT l.*, COUNT(v.id) as video_count,
+                COALESCE(l.cover_video_id,
+                  (SELECT v2.id FROM videos v2 INNER JOIN thumbnails t2 ON t2.video_id = v2.id
+                   WHERE v2.library_id = l.id ORDER BY v2.id ASC LIMIT 1)
+                ) as cover_vid
+         FROM libraries l
+         LEFT JOIN videos v ON v.library_id = l.id
+         WHERE l.user_id = ?
+         GROUP BY l.id
+         ORDER BY l.name`,
+        [userId]
+      ),
+      pool.execute(
+        `SELECT l.*, ls.permission, u.username as owner_name, COUNT(v.id) as video_count,
+                COALESCE(l.cover_video_id,
+                  (SELECT v2.id FROM videos v2 INNER JOIN thumbnails t2 ON t2.video_id = v2.id
+                   WHERE v2.library_id = l.id ORDER BY v2.id ASC LIMIT 1)
+                ) as cover_vid
+         FROM library_shares ls
+         JOIN libraries l ON l.id = ls.library_id
+         JOIN users u ON u.id = l.user_id
+         LEFT JOIN videos v ON v.library_id = l.id
+         WHERE ls.user_id = ?
+         GROUP BY l.id, ls.permission, u.username
+         ORDER BY l.name`,
+        [userId]
+      ),
+      getAccessibleLibraryIds(userId, userRole),
+    ]);
 
-    // Shared libraries (with cover thumbnail)
-    const [sharedLibraries] = await pool.execute(
-      `SELECT l.*, ls.permission, u.username as owner_name, COUNT(v.id) as video_count,
-              COALESCE(l.cover_video_id,
-                (SELECT v2.id FROM videos v2 INNER JOIN thumbnails t2 ON t2.video_id = v2.id
-                 WHERE v2.library_id = l.id ORDER BY v2.id ASC LIMIT 1)
-              ) as cover_vid
-       FROM library_shares ls
-       JOIN libraries l ON l.id = ls.library_id
-       JOIN users u ON u.id = l.user_id
-       LEFT JOIN videos v ON v.library_id = l.id
-       WHERE ls.user_id = ?
-       GROUP BY l.id, ls.permission, u.username
-       ORDER BY l.name`,
-      [userId]
-    );
-
-    // All accessible library IDs (for history/favorites)
-    const libIds = await getAccessibleLibraryIds(userId, userRole);
-
-    // Dashboard stats
     let stats = { totalVideos: 0, totalSize: 0, totalDuration: 0 };
-    if (libIds.length > 0) {
-      const [statRows] = await pool.query(
-        `SELECT COUNT(*) as totalVideos, COALESCE(SUM(v.size), 0) as totalSize, COALESCE(SUM(v.duration), 0) as totalDuration
-         FROM videos v WHERE v.library_id IN (?)`,
-        [libIds]
-      );
-      stats = statRows[0];
-    }
-
-    // Continue watching (in progress: between 5% and 95%)
     let continueWatching = [];
-    if (libIds.length > 0) {
-      [continueWatching] = await pool.query(
-        `SELECT v.id, v.filename, v.title, v.size, v.duration, t.filename as thumb, wh.progress, wh.watched_at
-         FROM watch_history wh
-         JOIN videos v ON v.id = wh.video_id
-         JOIN libraries l ON l.id = v.library_id
-         LEFT JOIN thumbnails t ON t.video_id = v.id
-         WHERE wh.user_id = ? AND l.id IN (?)
-           AND wh.progress > 0 AND v.duration IS NOT NULL AND v.duration > 0
-           AND (wh.progress / v.duration) > 0.05
-           AND (wh.progress / v.duration) < 0.95
-         ORDER BY wh.watched_at DESC
-         LIMIT 12`,
-        [userId, libIds]
-      );
-    }
-
-    // Recent watch history
     let history = [];
-    if (libIds.length > 0) {
-      [history] = await pool.query(
-        `SELECT v.id, v.filename, v.title, v.size, v.duration, t.filename as thumb, wh.watched_at, wh.progress
-         FROM watch_history wh
-         JOIN videos v ON v.id = wh.video_id
-         JOIN libraries l ON l.id = v.library_id
-         LEFT JOIN thumbnails t ON t.video_id = v.id
-         WHERE wh.user_id = ? AND l.id IN (?)
-         ORDER BY wh.watched_at DESC
-         LIMIT 12`,
-        [userId, libIds]
-      );
-    }
-
-    // Favorites
     let favorites = [];
-    if (libIds.length > 0) {
-      [favorites] = await pool.query(
-        `SELECT v.id, v.filename, v.title, v.size, v.duration, t.filename as thumb
-         FROM favorites f
-         JOIN videos v ON v.id = f.video_id
-         JOIN libraries l ON l.id = v.library_id
-         LEFT JOIN thumbnails t ON t.video_id = v.id
-         WHERE f.user_id = ? AND l.id IN (?)
-         ORDER BY f.created_at DESC
-         LIMIT 12`,
-        [userId, libIds]
-      );
-    }
-
-    // Watchlist
     let watchlist = [];
+
     if (libIds.length > 0) {
-      [watchlist] = await pool.query(
-        `SELECT v.id, v.filename, v.title, v.size, v.duration, t.filename as thumb
-         FROM watchlist w
-         JOIN videos v ON v.id = w.video_id
-         JOIN libraries l ON l.id = v.library_id
-         LEFT JOIN thumbnails t ON t.video_id = v.id
-         WHERE w.user_id = ? AND l.id IN (?)
-         ORDER BY w.created_at DESC
-         LIMIT 12`,
-        [userId, libIds]
-      );
+      // Five independent reads over the same library set — issue them as one wave.
+      const [statRows, cw, hist, favs, wl] = await Promise.all([
+        pool.query(
+          `SELECT COUNT(*) as totalVideos, COALESCE(SUM(v.size), 0) as totalSize,
+                  COALESCE(SUM(v.duration), 0) as totalDuration
+           FROM videos v WHERE v.library_id IN (?)`,
+          [libIds]
+        ),
+        // In progress: between 5% and 95% watched
+        pool.query(
+          `SELECT v.id, v.filename, v.title, v.size, v.duration, t.filename as thumb,
+                  wh.progress, wh.watched_at
+           FROM watch_history wh
+           JOIN videos v ON v.id = wh.video_id
+           LEFT JOIN thumbnails t ON t.video_id = v.id
+           WHERE wh.user_id = ? AND v.library_id IN (?)
+             AND wh.progress > 0 AND v.duration IS NOT NULL AND v.duration > 0
+             AND (wh.progress / v.duration) > 0.05
+             AND (wh.progress / v.duration) < 0.95
+           ORDER BY wh.watched_at DESC
+           LIMIT 12`,
+          [userId, libIds]
+        ),
+        pool.query(
+          `SELECT v.id, v.filename, v.title, v.size, v.duration, t.filename as thumb,
+                  wh.watched_at, wh.progress
+           FROM watch_history wh
+           JOIN videos v ON v.id = wh.video_id
+           LEFT JOIN thumbnails t ON t.video_id = v.id
+           WHERE wh.user_id = ? AND v.library_id IN (?)
+           ORDER BY wh.watched_at DESC
+           LIMIT 12`,
+          [userId, libIds]
+        ),
+        pool.query(
+          `SELECT v.id, v.filename, v.title, v.size, v.duration, t.filename as thumb
+           FROM favorites f
+           JOIN videos v ON v.id = f.video_id
+           LEFT JOIN thumbnails t ON t.video_id = v.id
+           WHERE f.user_id = ? AND v.library_id IN (?)
+           ORDER BY f.created_at DESC
+           LIMIT 12`,
+          [userId, libIds]
+        ),
+        pool.query(
+          `SELECT v.id, v.filename, v.title, v.size, v.duration, t.filename as thumb
+           FROM watchlist w
+           JOIN videos v ON v.id = w.video_id
+           LEFT JOIN thumbnails t ON t.video_id = v.id
+           WHERE w.user_id = ? AND v.library_id IN (?)
+           ORDER BY w.created_at DESC
+           LIMIT 12`,
+          [userId, libIds]
+        ),
+      ]);
+
+      stats = statRows[0][0];
+      continueWatching = cw[0];
+      history = hist[0];
+      favorites = favs[0];
+      watchlist = wl[0];
     }
 
     res.render('dashboard', {

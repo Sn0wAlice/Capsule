@@ -1,6 +1,6 @@
 {
   "name": "capsule",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Self-hosted video management app",
   "main": "src/app.js",
   "engines": {
@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node src/app.js",
     "worker": "node src/worker.js",
-    "dev": "node --watch src/app.js",
+    "dev": "VIEW_CACHE=false node --watch src/app.js",
     "test": "jest",
     "test:coverage": "jest --coverage",
     "test:watch": "jest --watch"

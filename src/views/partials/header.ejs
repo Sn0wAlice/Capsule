@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark">
   <title>Capsule<%= typeof pageTitle !== 'undefined' ? ' - ' + pageTitle : '' %></title>
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/style.css?v=<%= assetVersion %>">
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#09090b">
   <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>

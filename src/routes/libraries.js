@@ -1,5 +1,6 @@
 const express = require('express');
 const fs = require('fs');
+const fsp = require('fs/promises');
 const path = require('path');
 const pool = require('../config/database');
 const { requireAuth, getLibraryAccess, canWrite } = require('../middleware/auth');
@@ -7,6 +8,21 @@ const { scanLibrary } = require('../services/scanner');
 const { watchLibrary, unwatchLibrary } = require('../services/watcher');
 
 const router = express.Router();
+
+// Async existence check for a library path.
+async function isDirectory(dirPath) {
+  try {
+    return (await fsp.stat(dirPath)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+// Columns the library views actually render. Selecting these instead of `v.*`
+// keeps the TEXT `description` column out of every list query.
+const VIDEO_LIST_COLUMNS = `v.id, v.filename, v.filepath, v.title, v.size, v.duration,
+              v.width, v.height, v.view_count, v.updated_at, v.created_at,
+              t.filename as thumb, t.sprite_filename as sprite`;
 router.use(requireAuth);
 
 // Dashboard - list libraries
@@ -26,7 +42,7 @@ router.post('/add', async (req, res) => {
   }
 
   const resolvedPath = path.resolve(libPath);
-  if (!fs.existsSync(resolvedPath)) {
+  if (!(await isDirectory(resolvedPath))) {
     return res.redirect('/dashboard?error=That path does not exist');
   }
   // Block system-sensitive paths
@@ -80,7 +96,7 @@ router.post('/:id/edit', async (req, res) => {
 
     if (newPath) {
       const resolvedPath = path.resolve(newPath);
-      if (!fs.existsSync(resolvedPath)) {
+      if (!(await isDirectory(resolvedPath))) {
         return res.redirect('/dashboard?error=That path does not exist');
       }
       const blockedPaths = ['/', '/etc', '/root', '/var', '/usr', '/bin', '/sbin', '/sys', '/proc', '/dev'];
@@ -261,10 +277,13 @@ router.post('/:id/reset-previews', async (req, res) => {
         );
 
         const capsuleDir = path.join(libraryPath, '.capsule');
+        const artefacts = [];
         for (const t of thumbs) {
-          if (t.filename) try { fs.unlinkSync(path.join(capsuleDir, t.filename)); } catch {}
-          if (t.sprite_filename) try { fs.unlinkSync(path.join(capsuleDir, t.sprite_filename)); } catch {}
+          if (t.filename) artefacts.push(path.join(capsuleDir, t.filename));
+          if (t.sprite_filename) artefacts.push(path.join(capsuleDir, t.sprite_filename));
         }
+        // Unlink in parallel instead of one blocking call per file
+        await Promise.all(artefacts.map(f => fsp.unlink(f).catch(() => {})));
 
         // Delete thumbnail records
         await pool.execute(
@@ -379,33 +398,50 @@ router.get('/:id', async (req, res) => {
       }
       params.push(PAGE_SIZE + 1);
       const [rows] = await pool.query(
-        `SELECT v.*, t.filename as thumb, t.sprite_filename as sprite FROM videos v LEFT JOIN thumbnails t ON t.video_id = v.id${extraJoin} WHERE v.library_id = ?${extraWhere} ORDER BY ${orderCol} ${order === 'desc' ? 'DESC' : 'ASC'} LIMIT ?`,
+        `SELECT ${VIDEO_LIST_COLUMNS}
+         FROM videos v LEFT JOIN thumbnails t ON t.video_id = v.id${extraJoin}
+         WHERE v.library_id = ?${extraWhere}
+         ORDER BY ${orderCol} ${order === 'desc' ? 'DESC' : 'ASC'} LIMIT ?`,
         params
       );
       hasMore = rows.length > PAGE_SIZE;
       if (hasMore) rows.pop();
       videos = rows;
     } else {
-      const [rows] = await pool.execute(
-        'SELECT v.*, t.filename as thumb, t.sprite_filename as sprite FROM videos v LEFT JOIN thumbnails t ON t.video_id = v.id WHERE v.library_id = ?',
-        [libraryId]
+      // Folder view. `videos.folder` holds the parent directory of `filepath`, so
+      // both halves of this view are index lookups on (library_id, folder):
+      // the files sitting in the current path are an equality match, and the
+      // subfolder counts are grouped per distinct folder (a handful of rows)
+      // rather than bucketed over every video in the library.
+      const [filesInPath] = await pool.query(
+        `SELECT ${VIDEO_LIST_COLUMNS}
+         FROM videos v LEFT JOIN thumbnails t ON t.video_id = v.id
+         WHERE v.library_id = ? AND v.folder = ?
+         ORDER BY v.filename`,
+        [libraryId, currentPath]
       );
 
+      let descendants = 'v.library_id = ? AND v.folder <> ?';
+      const descParams = [libraryId, currentPath];
+      if (currentPath) {
+        // `%`, `_` and the escape char itself can all appear in a folder name
+        descendants += " AND v.folder LIKE ? ESCAPE '!'";
+        descParams.push(currentPath.replace(/[!%_]/g, '!$&') + '/%');
+      }
+
+      const [folderRows] = await pool.query(
+        `SELECT v.folder, COUNT(*) as cnt FROM videos v WHERE ${descendants} GROUP BY v.folder`,
+        descParams
+      );
+
+      // Roll the descendant folders up to their first segment below currentPath
+      const from = currentPath ? currentPath.length + 1 : 0;
       const folderCounts = {};
-      const filesInPath = [];
-
-      for (const video of rows) {
-        const relative = currentPath ? video.filepath.replace(currentPath + '/', '') : video.filepath;
-        const isInCurrentPath = currentPath ? video.filepath.startsWith(currentPath + '/') : true;
-
-        if (!isInCurrentPath && currentPath) continue;
-
-        const parts = relative.split('/');
-        if (parts.length > 1) {
-          folderCounts[parts[0]] = (folderCounts[parts[0]] || 0) + 1;
-        } else if (parts.length === 1 && isInCurrentPath) {
-          filesInPath.push(video);
-        }
+      for (const row of folderRows) {
+        const rest = row.folder.slice(from);
+        const head = rest.includes('/') ? rest.slice(0, rest.indexOf('/')) : rest;
+        if (!head) continue;
+        folderCounts[head] = (folderCounts[head] || 0) + row.cnt;
       }
 
       videos = filesInPath;

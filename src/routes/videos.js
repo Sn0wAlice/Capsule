@@ -1,5 +1,6 @@
 const express = require('express');
 const fs = require('fs');
+const fsp = require('fs/promises');
 const path = require('path');
 const pool = require('../config/database');
 const { requireAuth, getLibraryAccess, getAccessibleLibraryIds, canWrite } = require('../middleware/auth');
@@ -7,6 +8,31 @@ const { CAPSULE_DIR } = require('../services/scanner');
 
 const router = express.Router();
 router.use(requireAuth);
+
+// stat() a path, or null when it is missing. Replaces existsSync + statSync:
+// one syscall instead of two, and off the event loop.
+async function statOrNull(filePath) {
+  if (!filePath) return null;
+  try {
+    return await fsp.stat(filePath);
+  } catch {
+    return null;
+  }
+}
+
+// Serve a generated preview. The worker names every artefact with a fresh UUID,
+// so the filename is a content identity: it becomes the ETag, which turns a
+// revalidation into a 304 and lets a regenerated thumbnail show up immediately
+// instead of after the old 24h max-age had expired.
+function sendPreview(req, res, filePath, artefactName) {
+  const etag = `"${artefactName}"`;
+  res.setHeader('ETag', etag);
+  res.setHeader('Content-Type', 'image/jpeg');
+  // Serve from cache instantly, refresh in the background.
+  res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
+  if (req.headers['if-none-match'] === etag) return res.status(304).end();
+  fs.createReadStream(filePath).pipe(res);
+}
 
 // Validate that a resolved path stays within its parent directory
 function safePath(basePath, relativePath) {
@@ -51,11 +77,9 @@ router.get('/:id/thumb', async (req, res) => {
     if (!access.allowed) return res.status(404).send('');
 
     const thumbPath = safePath(path.join(rows[0].library_path, CAPSULE_DIR), rows[0].filename);
-    if (!thumbPath || !fs.existsSync(thumbPath)) return res.status(404).send('');
+    if (!(await statOrNull(thumbPath))) return res.status(404).send('');
 
-    res.setHeader('Content-Type', 'image/jpeg');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    fs.createReadStream(thumbPath).pipe(res);
+    sendPreview(req, res, thumbPath, rows[0].filename);
   } catch (err) {
     console.error('Thumb error:', err);
     res.status(500).send('');
@@ -79,11 +103,9 @@ router.get('/:id/sprite', async (req, res) => {
     if (!access.allowed) return res.status(404).send('');
 
     const spritePath = safePath(path.join(rows[0].library_path, CAPSULE_DIR), rows[0].sprite_filename);
-    if (!spritePath || !fs.existsSync(spritePath)) return res.status(404).send('');
+    if (!(await statOrNull(spritePath))) return res.status(404).send('');
 
-    res.setHeader('Content-Type', 'image/jpeg');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    fs.createReadStream(spritePath).pipe(res);
+    sendPreview(req, res, spritePath, rows[0].sprite_filename);
   } catch (err) {
     console.error('Sprite error:', err);
     res.status(500).send('');
@@ -399,7 +421,7 @@ router.get('/:id/download', async (req, res) => {
     const access = await getLibraryAccess(req.session.user.id, video.library_id, req.session.user.role);
     if (!access.allowed) return res.status(404).send('Video not found');
     const filePath = safePath(video.library_path, video.filepath);
-    if (!filePath || !fs.existsSync(filePath)) return res.status(404).send('File not found on disk');
+    if (!(await statOrNull(filePath))) return res.status(404).send('File not found on disk');
     const filename = path.basename(filePath);
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
     res.setHeader('Content-Type', video.mime_type || 'application/octet-stream');
@@ -425,7 +447,7 @@ router.get('/:id/subtitles/:filename', async (req, res) => {
     const access = await getLibraryAccess(req.session.user.id, rows[0].library_id, req.session.user.role);
     if (!access.allowed) return res.status(404).send('');
     const subPath = safePath(rows[0].library_path, rows[0].filename);
-    if (!subPath || !fs.existsSync(subPath)) return res.status(404).send('');
+    if (!(await statOrNull(subPath))) return res.status(404).send('');
     const ext = path.extname(rows[0].filename).toLowerCase();
     res.setHeader('Content-Type', ext === '.vtt' ? 'text/vtt' : 'text/plain');
     res.setHeader('Cache-Control', 'public, max-age=3600');
@@ -627,11 +649,11 @@ router.get('/:id/stream', async (req, res) => {
     if (!access.allowed) return res.status(404).send('Video not found');
 
     const filePath = safePath(video.library_path, video.filepath);
-    if (!filePath || !fs.existsSync(filePath)) {
+    const stat = await statOrNull(filePath);
+    if (!stat) {
       return res.status(404).send('File not found on disk');
     }
 
-    const stat = fs.statSync(filePath);
     const fileSize = stat.size;
     const range = req.headers.range;
 

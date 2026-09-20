@@ -1,12 +1,24 @@
+# Build artefacts and local state
 node_modules
 .git
 .github
 .idea
 media
 mysql_data
+
+# Secrets
 .env
 .env.*
 !.env.example
+
+# Not needed at runtime: keeping them out shrinks the image and stops test or
+# doc edits from invalidating the final COPY layer.
+tests
+jest.config.js
+coverage
 docker-compose*.yml
+Dockerfile
+.dockerignore
 README.md
 LICENSE
+init.sql

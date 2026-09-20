@@ -102,6 +102,24 @@ The app is then available at `http://localhost:3000`.
 3. Add a library, pointing it at a mounted folder (e.g. `/media/movies`)
 4. Run a scan to index the videos
 
+## Upgrading to 1.2.0
+
+1.2.0 ships a schema migration (`019_folder_column_and_perf_indexes.sql`): it adds
+a `folder` column to `videos`, backfills it, and creates six indexes.
+
+Migrations run **before the server starts listening**, so the first container
+start after the upgrade is unavailable until the migration finishes. How long
+that takes scales with the number of indexed videos — on a large library expect
+a noticeably longer first boot. The app and worker coordinate through an advisory
+lock, so only one of them does the work.
+
+The migration cannot start while another session holds an open transaction on
+`videos`. If the first boot appears to hang, check for a long-running query:
+
+```bash
+docker compose exec mysql mysql -u root -p -e "SHOW PROCESSLIST"
+```
+
 ## Upgrading from a version older than 1.1.0
 
 Version 1.1.0 moves the MySQL image from `8.0` (end of life) to `8.4` (LTS).
@@ -151,6 +169,8 @@ volumes:
 | `WORKER_CONCURRENCY` | Parallel ffmpeg jobs (worker) | `2` |
 | `WORKER_POLL_INTERVAL` | Worker poll interval (ms) | `3000` |
 | `DB_POOL_SIZE` | MySQL connection pool size | `30` |
+| `DB_STATEMENT_TIMEOUT_MS` | Abort a single SELECT after this long (0 disables) | `15000` |
+| `VIEW_CACHE` | `false` recompiles templates on every render (used by `npm run dev`) | `true` |
 | `NODE_ENV` | `production` marks the session cookie `Secure` (requires HTTPS) | — |
 
 ## CI/CD

@@ -12,4 +12,16 @@ const pool = mysql.createPool({
   connectTimeout: 10000,
 });
 
+// Cap how long a single SELECT may run. MySQL keeps executing a statement after
+// the HTTP client has given up, so one pathological query can otherwise burn a
+// core indefinitely and hold metadata locks that block migrations.
+const statementTimeoutMs = parseInt(process.env.DB_STATEMENT_TIMEOUT_MS || '15000', 10);
+if (statementTimeoutMs > 0) {
+  pool.on('connection', (conn) => {
+    conn.query(`SET SESSION MAX_EXECUTION_TIME = ${statementTimeoutMs}`, (err) => {
+      if (err) console.error('Could not set statement timeout:', err.message);
+    });
+  });
+}
+
 module.exports = pool;

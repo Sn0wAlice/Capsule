@@ -23,6 +23,7 @@ jest.mock('bcrypt', () => ({
 const path = require('path');
 const request = require('supertest');
 const fs = require('fs');
+const fsp = require('fs/promises');
 const pool = require('../../src/config/database');
 const createApp = require('../helpers/createApp');
 const { loginAs, loginAsAdmin } = require('../helpers/session');
@@ -30,8 +31,13 @@ const { loginAs, loginAsAdmin } = require('../helpers/session');
 const realExistsSync = fs.existsSync.bind(fs);
 const PROJECT_ROOT = path.join(__dirname, '../..');
 
+// The routes validate library paths with fsp.stat() rather than existsSync, so
+// the spy has to return a stat-like object.
+const DIR_STAT = { isDirectory: () => true, isFile: () => false, size: 0 };
+
 let app;
 let spyExistsSync;
+let spyStat;
 
 beforeAll(() => { app = createApp(); });
 
@@ -45,6 +51,12 @@ beforeEach(() => {
     if (String(p).startsWith(PROJECT_ROOT)) return realExistsSync(p);
     return true; // assume media paths exist by default
   });
+  spyStat = jest.spyOn(fsp, 'stat').mockImplementation(async (p) => {
+    if (String(p).startsWith(PROJECT_ROOT) && !realExistsSync(p)) {
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    }
+    return DIR_STAT; // assume media paths exist by default
+  });
   mockScanLibrary.mockClear();
   mockWatchLibrary.mockClear();
   mockUnwatchLibrary.mockClear();
@@ -52,6 +64,7 @@ beforeEach(() => {
 
 afterEach(() => {
   spyExistsSync.mockRestore();
+  spyStat.mockRestore();
 });
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
@@ -99,7 +112,7 @@ describe('POST /libraries/add', () => {
   });
 
   test('rejects non-existent path', async () => {
-    fs.existsSync.mockReturnValue(false);
+    fsp.stat.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
     const agent = await loginAs(app);
     const res = await agent.post('/libraries/add').send('name=Films&path=/nonexistent');
     expect(res.statusCode).toBe(302);
@@ -328,7 +341,7 @@ describe('POST /libraries/:id/edit', () => {
   });
 
   test('rejects non-existent new path', async () => {
-    spyExistsSync.mockReturnValue(false);
+    spyStat.mockRejectedValue(Object.assign(new Error("ENOENT"), { code: "ENOENT" }));
     pool.execute.mockResolvedValueOnce([[{ id: 1 }]]); // ownership check → owned
 
     const agent = await loginAs(app);

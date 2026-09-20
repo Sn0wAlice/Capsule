@@ -59,22 +59,35 @@ router.get('/', async (req, res) => {
       'SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 30'
     );
 
-    // Per-user stats: video count, total size, watch time, favorites, playlists
+    // Per-user stats.
+    // Each metric is aggregated in its own derived table before being joined.
+    // Joining the raw tables together first multiplies them into a cartesian
+    // product (videos x favorites x watch_history x playlists), which both
+    // inflates every SUM() and makes the query unusable past a few thousand rows.
     const [userStats] = await pool.execute(
       `SELECT u.id,
-              COUNT(DISTINCT v.id) as video_count,
-              COALESCE(SUM(v.size), 0) as total_size,
-              COUNT(DISTINCT f.id) as favorite_count,
-              COUNT(DISTINCT wh.id) as watched_count,
-              COUNT(DISTINCT p.id) as playlist_count,
-              COALESCE(SUM(wh.progress), 0) as total_watch_time
+              COALESCE(vs.video_count, 0)      as video_count,
+              COALESCE(vs.total_size, 0)       as total_size,
+              COALESCE(fs.favorite_count, 0)   as favorite_count,
+              COALESCE(ws.watched_count, 0)    as watched_count,
+              COALESCE(ps.playlist_count, 0)   as playlist_count,
+              COALESCE(ws.total_watch_time, 0) as total_watch_time
        FROM users u
-       LEFT JOIN libraries l ON l.user_id = u.id
-       LEFT JOIN videos v ON v.library_id = l.id
-       LEFT JOIN favorites f ON f.user_id = u.id
-       LEFT JOIN watch_history wh ON wh.user_id = u.id
-       LEFT JOIN playlists p ON p.user_id = u.id
-       GROUP BY u.id`
+       LEFT JOIN (
+         SELECT l.user_id, COUNT(v.id) as video_count, COALESCE(SUM(v.size), 0) as total_size
+         FROM libraries l LEFT JOIN videos v ON v.library_id = l.id
+         GROUP BY l.user_id
+       ) vs ON vs.user_id = u.id
+       LEFT JOIN (
+         SELECT user_id, COUNT(*) as favorite_count FROM favorites GROUP BY user_id
+       ) fs ON fs.user_id = u.id
+       LEFT JOIN (
+         SELECT user_id, COUNT(*) as watched_count, COALESCE(SUM(progress), 0) as total_watch_time
+         FROM watch_history GROUP BY user_id
+       ) ws ON ws.user_id = u.id
+       LEFT JOIN (
+         SELECT user_id, COUNT(*) as playlist_count FROM playlists GROUP BY user_id
+       ) ps ON ps.user_id = u.id`
     );
     const userStatsMap = {};
     for (const s of userStats) userStatsMap[s.id] = s;
