@@ -1,11 +1,11 @@
-FROM node:20-alpine
+FROM node:24-alpine
 
 RUN apk add --no-cache ffmpeg
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
-RUN npm install --production
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
 COPY . .
 

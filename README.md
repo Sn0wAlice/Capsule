@@ -50,10 +50,10 @@ Application web self-hosted de gestion et lecture de vidéos. Organisez vos bibl
 
 ## Stack
 
-- **Backend** — Node.js, Express, EJS
-- **Base de données** — MySQL 8
-- **Frontend** — Vanilla JS/CSS, ArtPlayer
-- **Infra** — Docker, GitHub Actions, GHCR
+- **Backend** — Node.js >= 20.19, Express 5, EJS 6
+- **Base de données** — MySQL 8.4 (LTS)
+- **Frontend** — Vanilla JS/CSS, ArtPlayer 5
+- **Infra** — Docker (image `node:24-alpine`), GitHub Actions, GHCR
 
 ## Déploiement rapide
 
@@ -101,6 +101,22 @@ L'application est accessible sur `http://localhost:3000`.
 3. Ajoutez une bibliothèque en indiquant le chemin du dossier monté (ex: `/media/films`)
 4. Lancez un scan pour indexer les vidéos
 
+## Mise à jour depuis une version < 1.1.0
+
+La version 1.1.0 fait passer l'image MySQL de `8.0` (fin de support) à `8.4` (LTS).
+MySQL migre le volume de données automatiquement au premier démarrage, mais **ce
+changement n'est pas réversible** : un retour à `mysql:8.0` sur le même volume
+échouera.
+
+Avant `docker compose pull && docker compose up -d`, sauvegardez la base :
+
+```bash
+docker compose exec mysql mysqldump -u root -p"$DB_PASSWORD" --all-databases > capsule-backup.sql
+```
+
+Pour rester sur MySQL 8.0, remplacez `image: mysql:8.4` par `image: mysql:8.0`
+dans votre `docker-compose.yml` — l'application reste compatible.
+
 ## Volumes
 
 | Chemin conteneur | Description |
@@ -133,11 +149,14 @@ volumes:
 | `MEDIA_PATH` | Chemin local des médias (compose) | `./media` |
 | `WORKER_CONCURRENCY` | Jobs ffmpeg en parallèle (worker) | `2` |
 | `WORKER_POLL_INTERVAL` | Intervalle de polling du worker (ms) | `3000` |
+| `DB_POOL_SIZE` | Taille du pool de connexions MySQL | `30` |
+| `NODE_ENV` | `production` force le cookie de session en `Secure` (HTTPS requis) | — |
 
 ## CI/CD
 
-Le workflow GitHub Actions (`.github/workflows/docker.yml`) build et push automatiquement l'image Docker sur GHCR :
+Le workflow GitHub Actions (`.github/workflows/docker.yml`) exécute la suite de tests puis build et push l'image Docker sur GHCR. Le build est bloqué si les tests échouent :
 
+- **Job `test`** — `npm ci` + `npm test` sur Node 24
 - **Push sur `main`** — build et push avec les tags `latest` + SHA du commit
 - **Tag `v*`** — build et push avec le tag de version (ex: `v1.0.0` → `1.0.0`, `1.0`)
 - **Pull request** — build uniquement (pas de push), vérifie que l'image compile
